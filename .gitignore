@@ -4,3 +4,6 @@ node_modules/
 *.db-*
 dados/
 trabalho/*/telas*/
+trabalho/*/tmp*/
+trabalho/*/ataque-*.mjs
+trabalho/*/setup-*.mjs
