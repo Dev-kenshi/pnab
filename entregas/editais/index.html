@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sistema Integrado TEB</title>
+  <meta name="description" content="Sistema Integrado TEB: editais culturais da Teste de Elenco Brasil.">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/inscricao.css">
+  <link rel="stylesheet" href="css/gestao.css">
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <a class="pular" href="#conteudo" data-pular>Pular para o conteúdo</a>
+  <div class="faixa-listrada" aria-hidden="true"></div>
+  <header class="topo">
+    <div class="topo-miolo">
+      <a class="marca" href="#/login" data-marca>
+        <img class="marca-logo" src="img/logo.png" alt="Teste de Elenco Brasil" width="44" height="44">
+        <span class="marca-texto">Sistema Integrado TEB</span>
+      </a>
+      <nav class="topo-nav" aria-label="Principal" data-nav hidden></nav>
+      <div class="topo-usuario" data-usuario hidden>
+        <span class="topo-nome" data-usuario-nome></span>
+        <button type="button" class="botao botao-contorno" data-acao="sair">Sair</button>
+      </div>
+    </div>
+  </header>
+  <div class="faixa-modo" data-modo="demonstracao" role="status" hidden>Modo demonstração: dados fictícios</div>
+  <main id="conteudo" class="conteudo" tabindex="-1"></main>
+  <footer class="rodape" data-rodape>
+    <p>Emanuel Macêdo Luz, desenvolvedor do projeto</p>
+  </footer>
+</body>
+</html>
