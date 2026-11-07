@@ -1,0 +1,14 @@
+{
+  "name": "teb-editais",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Sistema Integrado TEB: editais culturais. Servidor Node 24 sem pacotes externos.",
+  "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "test": "node --test",
+    "start": "node servidor/principal.js"
+  }
+}
