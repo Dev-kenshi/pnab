@@ -1,0 +1,11 @@
+{
+  "name": "pnab-sistema-editais",
+  "private": true,
+  "description": "Sistema de editais culturais. Emanuel Macêdo Luz, desenvolvedor do projeto.",
+  "scripts": {
+    "portoes": "node scripts/portoes/portao-3.mjs entregas/editais && node scripts/portoes/portao-4.mjs entregas/editais --criterios trabalho/editais/criterios.json --telas trabalho/editais/telas"
+  },
+  "devDependencies": {
+    "playwright": "^1.65.0"
+  }
+}
