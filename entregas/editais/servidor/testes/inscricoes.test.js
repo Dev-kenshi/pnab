@@ -268,6 +268,26 @@ test('F2: valor negativo, fracionado em centavos ou texto dá 400 validacao e n�
   assert.equal(vazio.corpo.inscricao.ficha.orcamento[0].valor, null);
 });
 
+test('valor do item acima de R$ 10.000.000,00 dá 400 validacao e não grava', async () => {
+  const id = await rascunho();
+  const mensagem = 'Valor do item acima do máximo de R$ 10.000.000,00.';
+  for (const valor of [1000000001, 1e15]) {
+    const orcamento = [{ descricao: 'Ok', qtd: 1, valor: 500 }, { descricao: 'Absurdo', qtd: 1, valor }];
+    const r = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: fichaValida({ orcamento }) });
+    assert.equal(r.status, 400, String(valor));
+    assert.equal(r.corpo.erro, 'validacao');
+    assert.deepEqual(r.corpo.campos, [{ campo: 'orc-valor', mensagem, linha: 1 }]);
+    const env = await prop.pedir('POST', `/api/inscricoes/${id}/enviar`, { ficha: fichaValida({ orcamento }) });
+    assert.equal(env.status, 400);
+    assert.equal(env.corpo.erro, 'validacao');
+  }
+  const ver = await prop.pedir('GET', `/api/inscricoes/${id}`);
+  assert.equal(ver.corpo.inscricao.situacao, 'rascunho');
+  const limite = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: { titulo: 'Limite', orcamento: [{ descricao: 'No limite', qtd: 1, valor: 1000000000 }] } });
+  assert.equal(limite.status, 200);
+  assert.equal(limite.corpo.inscricao.ficha.orcamento[0].valor, 1000000000);
+});
+
 test('F4: teto do edital recusado com mensagem em reais', async () => {
   for (const [teto, mensagem] of [
     ['', 'Campo obrigatório: Teto do orçamento (R$)'],

@@ -88,7 +88,7 @@ test('semente: contas, datas relativas, protocolos e nenhuma senha em texto', as
 
 test('C1 login com sucesso e sessão', async () => {
   const { api, armazenamento } = montar();
-  assert.equal((await erroDe(api.sessao())).status, 401);
+  assert.deepEqual(await api.sessao(), { usuario: null });
   assert.deepEqual(await api.verificarDocumento('529.982.247-25'), { existe: true });
   const { usuario } = await entrarComo(api, MARINA);
   assert.equal(usuario.papel, 'proponente');
@@ -497,7 +497,8 @@ test('sessão vence em 8 horas', async () => {
   agora.avancar(7 * HORA);
   assert.equal((await api.sessao()).usuario.documento, MARINA);
   agora.avancar(2 * HORA);
-  assert.equal((await erroDe(api.sessao())).status, 401);
+  assert.deepEqual(await api.sessao(), { usuario: null });
+  assert.equal((await erroDe(api.obterConta())).status, 401);
 });
 
 test('buscarCep com fetch simulado', async () => {
@@ -582,9 +583,13 @@ test('rota inexistente e corpo inválido seguem o formato do servidor', async ()
   const r = await demo.requisitar('GET', '/api/nada');
   assert.equal(r.status, 404);
   assert.deepEqual(r.corpo, { erro: 'nao_encontrado', mensagem: 'Endereço não encontrado.' });
+  // F6: sem sessão, igual ao servidor real: 200 com usuario null. As outras rotas protegidas seguem 401.
   const s = await demo.requisitar('GET', '/api/sessao');
-  assert.equal(s.status, 401);
-  assert.equal(s.corpo.erro, 'sem_sessao');
+  assert.equal(s.status, 200);
+  assert.deepEqual(s.corpo, { usuario: null });
+  const conta = await demo.requisitar('GET', '/api/conta');
+  assert.equal(conta.status, 401);
+  assert.equal(conta.corpo.erro, 'sem_sessao');
   const j = await demo.requisitar('POST', '/api/acesso/documento', [1]);
   assert.equal(j.status, 400);
   assert.equal(j.corpo.erro, 'json_invalido');
@@ -615,7 +620,7 @@ test('modo servidor monta o pedido certo e converte erro em ErroApi', async () =
   assert.equal(pedidos[0].init.credentials, 'same-origin');
   assert.equal(pedidos[0].init.headers['Content-Type'], 'application/json');
   assert.deepEqual(JSON.parse(pedidos[0].init.body), { documento: MARINA, senha: 'x' });
-  await api.sessao();
+  assert.deepEqual(await api.sessao(), { usuario: { id: 1 } });
   assert.equal(pedidos[1].caminho, '/api/sessao');
   assert.equal(pedidos[1].init.method, 'GET');
   assert.equal(pedidos[1].init.body, undefined);
@@ -673,4 +678,24 @@ test('F2/F4: demonstração tem a mesma resposta do servidor para valor do item 
   }
   const ok = await api.criarEdital({ ...base, teto: 1000000 });
   assert.equal(ok.edital.teto, 1000000);
+});
+
+test('valor do item acima de R$ 10.000.000,00: demonstração responde igual ao servidor', async () => {
+  const { limparFicha } = await import('../../servidor/rotas/proponente.js');
+  const { api } = montar();
+  await entrarComo(api, MARINA);
+  const { inscricao } = await api.criarInscricao('ed-exemplo-001', {});
+  for (const valor of [1000000001, 1e15]) {
+    const ficha = { orcamento: [{ descricao: 'Item', qtd: 1, valor }] };
+    let esperado;
+    try { limparFicha(ficha, { camposExtras: [] }, {}); } catch (e) { esperado = { status: e.status, erro: e.erro, campos: e.campos }; }
+    assert.ok(esperado, 'o servidor recusa');
+    const e = await erroDe(api.salvarRascunho(inscricao.id, ficha));
+    assert.deepEqual({ status: e.status, erro: e.erro, campos: e.campos }, esperado);
+    assert.equal(e.status, 400);
+    assert.equal(e.erro, 'validacao');
+    assert.equal(e.campos[0].mensagem, 'Valor do item acima do máximo de R$ 10.000.000,00.');
+  }
+  const ok = await api.salvarRascunho(inscricao.id, { orcamento: [{ descricao: 'a', qtd: 1, valor: 1000000000 }] });
+  assert.equal(ok.inscricao.ficha.orcamento[0].valor, 1000000000);
 });

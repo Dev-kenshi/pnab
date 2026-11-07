@@ -215,3 +215,14 @@ test('protocolo, senha e arquivo PDF', () => {
   assert.ok(r.validarArquivoPdf({ nome: 'a.pdf', tipo: 'application/pdf', tamanho: r.LIMITE_ANEXO + 1 }));
   assert.equal(r.validarArquivoPdf({ nome: 'a.pdf', tipo: 'application/pdf', tamanho: r.LIMITE_ANEXO }), null);
 });
+
+test('valor do item tem teto máximo de R$ 10.000.000,00', () => {
+  assert.equal(r.VALOR_ITEM_MAXIMO, 1000000000);
+  assert.equal(r.erroValorItem(1000000000), null);
+  assert.equal(r.erroValorItem(1000000001), 'Valor do item acima do máximo de R$ 10.000.000,00.');
+  assert.equal(r.erroValorItem(1e15), 'Valor do item acima do máximo de R$ 10.000.000,00.');
+  assert.equal(r.erroValorItem(r.reaisParaCentavos('10.000.000,01')), 'Valor do item acima do máximo de R$ 10.000.000,00.');
+  const base = { titulo: 'T', categoria: 'Teatro', cota: 'Ampla concorrência', extras: { 'extra-resumo': 'R' }, aceite: true, metas: [], equipe: [] };
+  const alto = r.validarFicha(edital, { ...base, orcamento: [{ descricao: 'X', qtd: 1, valor: 1000000001 }] });
+  assert.deepEqual(alto, [{ campo: 'orc-valor', mensagem: 'Valor do item acima do máximo de R$ 10.000.000,00.', linha: 0 }]);
+});

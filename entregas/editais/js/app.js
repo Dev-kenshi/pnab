@@ -80,7 +80,8 @@ function desenharTopo(usuario) {
 }
 
 async function usuarioAtual() {
-  try { return (await api.sessao()).usuario; } catch { return null; }
+  // A API responde { usuario: null } quando não há sessão.
+  try { return (await api.sessao())?.usuario ?? null; } catch { return null; }
 }
 
 async function rotear() {

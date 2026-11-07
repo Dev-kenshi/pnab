@@ -104,7 +104,8 @@ export function criarApi({ modo = 'demonstracao', fetch: fetchFn = globalThis.fe
 
   return {
     modo,
-    sessao: () => pedir('GET', '/api/sessao'),
+    // Sem sessão devolve { usuario: null } com status 200.
+    sessao: async () => ({ usuario: (await pedir('GET', '/api/sessao'))?.usuario ?? null }),
     listarOrganizacoes: () => pedir('GET', '/api/organizacoes'),
     verificarDocumento: documento => pedir('POST', '/api/acesso/documento', { documento }),
     entrar: (documento, senha) => {

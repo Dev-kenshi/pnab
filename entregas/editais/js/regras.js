@@ -109,6 +109,9 @@ export function mensagemTeto(total, teto) {
   return null;
 }
 
+// Teto máximo do valor unitário de um item: R$ 10.000.000,00, em centavos.
+export const VALOR_ITEM_MAXIMO = 1000000000;
+
 // Valor unitário de item do orçamento, em centavos inteiros. Devolve a mensagem de erro ou null.
 export function erroValorItem(valor) {
   if (vazio(valor)) return obrigatorio('Valor do item');
@@ -116,6 +119,7 @@ export function erroValorItem(valor) {
   if (!Number.isFinite(n)) return 'Valor do item inválido.';
   if (n < 0) return 'Valor do item não pode ser negativo';
   if (!Number.isInteger(n)) return 'Valor do item inválido. Use no máximo dois decimais.';
+  if (n > VALOR_ITEM_MAXIMO) return `Valor do item acima do máximo de ${formatarMoeda(VALOR_ITEM_MAXIMO)}.`;
   return null;
 }
 

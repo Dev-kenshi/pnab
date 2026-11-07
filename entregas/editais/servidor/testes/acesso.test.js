@@ -67,18 +67,27 @@ test('S3: cookie HttpOnly e SameSite=Strict, sem Secure em HTTP, e 401 sem cooki
 
   assert.equal((await c.pedir('GET', '/api/sessao')).status, 200);
   const sem = amb.cliente();
-  for (const rota of ['/api/sessao', '/api/conta', '/api/proponente/painel', '/api/gestor/editais']) {
+  // F6: sem sessão, /api/sessao responde 200 com usuario null. As outras rotas protegidas seguem 401.
+  const anonimo = await sem.pedir('GET', '/api/sessao');
+  assert.equal(anonimo.status, 200);
+  assert.deepEqual(anonimo.corpo, { usuario: null });
+  for (const rota of ['/api/conta', '/api/proponente/painel', '/api/gestor/editais', '/api/avaliador/inscricoes']) {
     const x = await sem.pedir('GET', rota);
     assert.equal(x.status, 401, rota);
     assert.equal(x.corpo.erro, 'sem_sessao');
   }
   const falso = await sem.pedir('GET', '/api/sessao', undefined, { cabecalhos: { cookie: 'teb_sessao=inventado' } });
-  assert.equal(falso.status, 401);
+  assert.equal(falso.status, 200);
+  assert.deepEqual(falso.corpo, { usuario: null });
+  assert.equal((await sem.pedir('GET', '/api/conta', undefined, { cabecalhos: { cookie: 'teb_sessao=inventado' } })).status, 401);
 
   const s = await c.pedir('POST', '/api/acesso/sair', {});
   assert.equal(s.status, 204);
   assert.match(s.setCookie[0], /Max-Age=0/);
-  assert.equal((await c.pedir('GET', '/api/sessao', undefined, { cabecalhos: { cookie: `teb_sessao=${token}` } })).status, 401);
+  const depois = await c.pedir('GET', '/api/sessao', undefined, { cabecalhos: { cookie: `teb_sessao=${token}` } });
+  assert.equal(depois.status, 200);
+  assert.equal(depois.corpo.usuario, null);
+  assert.equal((await c.pedir('GET', '/api/conta', undefined, { cabecalhos: { cookie: `teb_sessao=${token}` } })).status, 401);
 });
 
 test('S3: com HTTPS o cookie leva Secure e a sessão vence em 8 horas', async () => {
@@ -89,7 +98,10 @@ test('S3: com HTTPS o cookie leva Secure e a sessão vence em 8 horas', async ()
     assert.match(r.setCookie[0], /; Secure/);
     assert.equal(r.cabecalhos.get('strict-transport-security'), 'max-age=31536000');
     seguro.relogio.avancar(8 * 60 * 60 * 1000 + 1000);
-    assert.equal((await c.pedir('GET', '/api/sessao')).status, 401);
+    const vencida = await c.pedir('GET', '/api/sessao');
+    assert.equal(vencida.status, 200);
+    assert.equal(vencida.corpo.usuario, null);
+    assert.equal((await c.pedir('GET', '/api/conta')).status, 401);
   } finally {
     await seguro.fechar();
   }

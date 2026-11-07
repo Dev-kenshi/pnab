@@ -183,7 +183,7 @@ export async function renderNovaInscricao(ctx) {
         const id = novoId(nome);
         const input = el('input', {
           id, type: tipoInput, 'data-campo': nome, name: nome, 'aria-describedby': `${id}-erro`,
-          min: tipoInput === 'number' ? 0 : false, step: tipoInput === 'number' ? 'any' : false,
+          min: tipoInput === 'number' ? 0 : false, step: nome === 'orc-valor' ? '0.01' : tipoInput === 'number' ? 'any' : false,
           inputmode: nome === 'orc-valor' || nome === 'orc-qtd' ? 'decimal' : false, autocomplete: 'off',
         });
         let v = valores[chave];
@@ -244,6 +244,8 @@ export async function renderNovaInscricao(ctx) {
       if (Number(linhas[i].valor) < 0) {
         colocarErro(inputValor, 'negativo', regras.erroValorItem(linhas[i].valor), 'orc-valor');
         linhas[i].valor = 0;
+      } else if (Number(linhas[i].valor) > regras.VALOR_ITEM_MAXIMO) {
+        colocarErro(inputValor, 'negativo', regras.erroValorItem(linhas[i].valor), 'orc-valor');
       } else if (inputValor.getAttribute('aria-invalid') && !tr.querySelector('.erro-dinamico')) {
         inputValor.removeAttribute('aria-invalid');
       }
@@ -512,9 +514,10 @@ export async function renderNovaInscricao(ctx) {
   tMetas.renumerar(); tEquipe.renumerar(); tOrc.renumerar();
   atualizarOrcamento();
 
+  // Limpa o erro do campo antes de recalcular, para o aviso ao vivo do valor do item ficar na tela.
+  form.addEventListener('input', e => { if (e.target.matches?.('[aria-invalid]')) limparErrosDe(e.target); });
   form.addEventListener('input', aoMudar);
   form.addEventListener('change', e => { if (e.target.type === 'checkbox' || e.target.tagName === 'SELECT') aoMudar(); });
-  form.addEventListener('input', e => { if (e.target.matches?.('[aria-invalid]')) limparErrosDe(e.target); });
   form.addEventListener('submit', e => { e.preventDefault(); enviar(); });
   form.querySelector("[data-acao='salvar-rascunho']").addEventListener('click', salvarRascunho);
 }

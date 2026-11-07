@@ -80,8 +80,9 @@ async function abrirSessao(ctx, usuarioId) {
 
 export default [
   {
-    metodo: 'GET', caminho: '/api/sessao', papel: 'logado',
-    fn: async ctx => ({ corpo: { usuario: usuarioPublico(ctx.usuario) } }),
+    // Pública: sem sessão responde 200 com usuario null, para o navegador não registrar erro.
+    metodo: 'GET', caminho: '/api/sessao', papel: 'publico',
+    fn: async ctx => ({ corpo: { usuario: ctx.usuario ? usuarioPublico(ctx.usuario) : null } }),
   },
   {
     metodo: 'GET', caminho: '/api/organizacoes', papel: 'publico',

@@ -404,8 +404,9 @@ function registrarErroLogin(db, documento, agora) {
 
 const rotasAcesso = [
   {
-    metodo: 'GET', caminho: '/api/sessao', papel: 'logado',
-    fn: async ctx => ({ corpo: { usuario: usuarioPublico(ctx.db, ctx.usuario) } }),
+    // Pública: sem sessão responde 200 com usuario null, igual ao servidor real.
+    metodo: 'GET', caminho: '/api/sessao', papel: 'publico',
+    fn: async ctx => ({ corpo: { usuario: ctx.usuario ? usuarioPublico(ctx.db, ctx.usuario) : null } }),
   },
   {
     metodo: 'GET', caminho: '/api/organizacoes', papel: 'publico',
