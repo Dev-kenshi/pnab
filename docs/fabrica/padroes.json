@@ -1,0 +1,95 @@
+[
+  {
+    "id": "grafo",
+    "titulo": "Pense em grafo, não em fila",
+    "texto": "Nó é uma tarefa com entrada e saída definidas. Aresta é um dado que passa de um nó para outro. Se nenhum dado passa, as tarefas rodam em paralelo.",
+    "tags": [
+      "arquitetura",
+      "agentes",
+      "paralelo"
+    ]
+  },
+  {
+    "id": "contrato",
+    "titulo": "Todo nó tem contrato",
+    "texto": "Entrada acotada, saída com schema validado e um único trabalho. Saída sem forma não é nó, é conversa.",
+    "tags": [
+      "schema",
+      "json",
+      "validação"
+    ]
+  },
+  {
+    "id": "encanamento",
+    "titulo": "Agente para julgamento, código para encanamento",
+    "texto": "Juntar, filtrar, deduplicar e somar é código. Agente só onde há julgamento. Aresta é grátis.",
+    "tags": [
+      "custo",
+      "tokens"
+    ]
+  },
+  {
+    "id": "barreira",
+    "titulo": "Barreira só quando precisa",
+    "texto": "Espere todos terminarem apenas quando a etapa seguinte precisa do conjunto inteiro. No resto, fluxo contínuo.",
+    "tags": [
+      "latência",
+      "paralelo"
+    ]
+  },
+  {
+    "id": "roteador",
+    "titulo": "Modelo classifica, código roteia",
+    "texto": "Um modelo barato decide o que é o pedido. Um if ou switch decide o caminho. Sempre igual para a mesma classificação.",
+    "tags": [
+      "roteamento",
+      "n8n"
+    ]
+  },
+  {
+    "id": "verificador",
+    "titulo": "Verificador separado",
+    "texto": "Quem escreveu não corrige o próprio trabalho. Verificadores independentes, cada um com um ângulo diferente.",
+    "tags": [
+      "qualidade",
+      "revisão"
+    ]
+  },
+  {
+    "id": "loop",
+    "titulo": "Loop com limite",
+    "texto": "Todo ciclo tem teto de rodadas e para depois de K rodadas sem nada novo. Deduplique contra tudo que já foi visto.",
+    "tags": [
+      "loop",
+      "custo"
+    ]
+  },
+  {
+    "id": "modelo-certo",
+    "titulo": "Modelo caro só onde há critério",
+    "texto": "Tarefas repetitivas em modelo barato ou gratuito. Síntese e decisão no modelo mais forte.",
+    "tags": [
+      "custo",
+      "modelos"
+    ]
+  },
+  {
+    "id": "camadas",
+    "titulo": "Cérebro em camadas",
+    "texto": "Antes da IA online: cache, conhecimento aprovado, busca semântica e banco por gatilhos. Só o que muda com o tempo (lei, alíquota, notícia) vai direto para a IA online.",
+    "tags": [
+      "cérebro",
+      "tokens",
+      "assistente"
+    ]
+  },
+  {
+    "id": "evolucao-continua",
+    "titulo": "Agentes erram mais na manutenção",
+    "texto": "Agentes passam de 80% em tarefa isolada e caem para no máximo 38% em evolução contínua (EvoClaw). Por isso a manutenção fica no motor testado, não em código novo a cada projeto.",
+    "tags": [
+      "manutenção",
+      "testes"
+    ]
+  }
+]

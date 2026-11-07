@@ -1,0 +1,89 @@
+[
+  {
+    "id": "subamostra",
+    "titulo": "Relatório com subamostra parcial",
+    "texto": "Em pesquisa de campo, conferir o n de cada formulário contra a base completa antes de qualquer relatório.",
+    "tags": [
+      "pesquisa",
+      "dados",
+      "relatório"
+    ]
+  },
+  {
+    "id": "previa-hash",
+    "titulo": "Prévia em iframe srcdoc não usa hash",
+    "texto": "Dentro de srcdoc, link #rota navega para a URL da página mãe. A prévia usa rota em memória.",
+    "tags": [
+      "motor",
+      "prévia",
+      "bug"
+    ]
+  },
+  {
+    "id": "formula-acento",
+    "titulo": "Fórmula com texto acentuado",
+    "texto": "A validação de fórmulas ignora o conteúdo entre aspas. Acentos em textos ('Vitória') são permitidos.",
+    "tags": [
+      "fórmula",
+      "validação"
+    ]
+  },
+  {
+    "id": "cors",
+    "titulo": "Quais IAs aceitam o navegador",
+    "texto": "Testado em 01/11/2026 a partir do GitHub Pages. Aceitam: Anthropic, Gemini, Groq, OpenRouter, Mistral, Hugging Face e Cohere. Bloqueiam: Cerebras, GitHub Models, NVIDIA NIM e SambaNova.",
+    "tags": [
+      "ia",
+      "provedores",
+      "cors",
+      "gratuito"
+    ]
+  },
+  {
+    "id": "groq-llama",
+    "titulo": "Groq tirou o Llama do plano gratuito",
+    "texto": "Desde 16/08/2026 o plano gratuito do Groq usa openai/gpt-oss-120b, openai/gpt-oss-20b e Qwen no lugar do Llama 3.",
+    "tags": [
+      "ia",
+      "groq",
+      "gratuito"
+    ]
+  },
+  {
+    "id": "script-escape",
+    "titulo": "Spec embutida no HTML",
+    "texto": "Escapar < no JSON e </script no JS embutido. Senão a descrição do cliente pode quebrar a página.",
+    "tags": [
+      "segurança",
+      "build"
+    ]
+  },
+  {
+    "id": "pages-privado",
+    "titulo": "GitHub Pages em repositório privado",
+    "texto": "No plano gratuito o Pages só publica repositório público. A Fábrica cria os repositórios dos clientes como públicos.",
+    "tags": [
+      "github",
+      "deploy"
+    ]
+  },
+  {
+    "id": "repo-publico",
+    "titulo": "Repositório público não guarda dado pessoal",
+    "texto": "Cérebro e agentes guardam só estrutura de conhecimento. Nada de nome de pessoa, empresa empregadora ou cliente identificável.",
+    "tags": [
+      "privacidade"
+    ]
+  },
+  {
+    "id": "assistente-busca-tema-errado",
+    "titulo": "Assistente por busca responde com dado de outro tema",
+    "texto": "Em assistente sem IA que busca em dados oficiais, uma palavra solta como CFC, custa ou horário casa com o item errado e a fonte oficial faz o erro parecer certo. Exija cobertura de todos os termos específicos da pergunta, trate pergunta de preço, endereço e pessoa como tema próprio com resposta de não sei, e mantenha uma bateria de perguntas fora da base em teste de unidade desde a primeira versão.",
+    "tags": [
+      "assistente",
+      "busca",
+      "dados oficiais",
+      "testes"
+    ]
+  }
+]

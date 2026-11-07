@@ -1,0 +1,32 @@
+[
+  {
+    "id": "escrita",
+    "titulo": "Regras de escrita",
+    "texto": "Português do Brasil. Frases curtas. Nunca usar travessão. Sem linguagem que soe como IA. Rótulos de interface no que o usuário reconhece, não no que o sistema usa por dentro.",
+    "sempre": true
+  },
+  {
+    "id": "spec-unica",
+    "titulo": "Tudo nasce da spec",
+    "texto": "A IA não escreve o sistema do zero. Ela produz uma spec JSON. O motor determinístico monta telas, banco, cálculos e painel. Corrigir o motor corrige todos os sistemas.",
+    "sempre": true
+  },
+  {
+    "id": "exemplos-relacao",
+    "titulo": "Exemplos com relação usam o título",
+    "texto": "Nos exemplos, um campo relacao recebe o valor do título do registro alvo (ex.: plano: Mensal), nunca um id.",
+    "sempre": true
+  },
+  {
+    "id": "dados-reais",
+    "titulo": "Nunca inventar dado de cliente",
+    "texto": "Exemplos são fictícios e plausíveis. Nada de nome, telefone ou documento real de pessoas.",
+    "sempre": true
+  },
+  {
+    "id": "segredos",
+    "titulo": "Segredos fora do código",
+    "texto": "Tokens e chaves ficam no navegador ou em variáveis de ambiente. Nunca em commit, spec ou README.",
+    "sempre": true
+  }
+]
