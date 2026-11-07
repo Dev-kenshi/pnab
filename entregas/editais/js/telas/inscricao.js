@@ -242,7 +242,7 @@ export async function renderNovaInscricao(ctx) {
       const inputValor = tr.querySelector("[data-campo='orc-valor']");
       tr.querySelectorAll("[data-erro='negativo']").forEach(e => e.remove());
       if (Number(linhas[i].valor) < 0) {
-        colocarErro(inputValor, 'negativo', 'Valor do item não pode ser negativo', 'orc-valor');
+        colocarErro(inputValor, 'negativo', regras.erroValorItem(linhas[i].valor), 'orc-valor');
         linhas[i].valor = 0;
       } else if (inputValor.getAttribute('aria-invalid') && !tr.querySelector('.erro-dinamico')) {
         inputValor.removeAttribute('aria-invalid');

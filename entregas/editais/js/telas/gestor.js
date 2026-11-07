@@ -306,7 +306,7 @@ export async function renderGestorEditalForm(ctx) {
     for (const l of Object.values(listas)) l.itens.forEach(i => { if (i.erro) { i.erro.textContent = ''; i.erro.hidden = true; } });
     const dados = {
       numero: cNumero.input.value.trim(), titulo: cTitulo.input.value.trim(), descricao: cDescricao.input.value.trim(),
-      inicio: cInicio.input.value, fim: cFim.input.value, teto: reaisParaCentavos(cTeto.input.value),
+      inicio: cInicio.input.value, fim: cFim.input.value, teto: cTeto.input.value.trim() === '' ? '' : reaisParaCentavos(cTeto.input.value),
       categorias: categorias.ler(), cotas: cotas.ler(), criterios: criterios.ler(), camposExtras: extras.ler(),
     };
     salvar.disabled = true;

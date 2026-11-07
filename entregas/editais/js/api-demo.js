@@ -208,9 +208,8 @@ function lerModeloEdital(c) {
   if (!regras.dataValida(inicio)) campos.push({ campo: 'inicio', mensagem: 'Campo obrigatório: Início' });
   if (!regras.dataValida(fim)) campos.push({ campo: 'fim', mensagem: 'Campo obrigatório: Fim' });
   else if (regras.dataValida(inicio) && fim < inicio) campos.push({ campo: 'fim', mensagem: 'O fim precisa ser depois do início.' });
-  if (c.teto === null || c.teto === undefined || c.teto === '' || !Number.isInteger(teto) || teto <= 0) {
-    campos.push({ campo: 'teto', mensagem: 'Campo obrigatório: Teto, em centavos e maior que zero' });
-  }
+  const erroTeto = regras.erroTeto(c.teto);
+  if (erroTeto) campos.push({ campo: 'teto', mensagem: erroTeto });
   const categorias = listaDeNomes(c.categorias, 'categorias', 'Categoria', campos);
   const cotas = listaDeNomes(c.cotas, 'cotas', 'Cota', campos);
 
@@ -248,6 +247,24 @@ function lerModeloEdital(c) {
   return { numero, titulo, descricao, inicio, fim, teto, ano: Number(inicio.slice(0, 4)), categorias, cotas, criterios, camposExtras };
 }
 
+// Orçamento: valor unitário em centavos inteiros, guardado sem arredondar.
+// Vazio vira null. Negativo, fracionado ou texto dá 400, como no servidor.
+function lerOrcamento(bruto) {
+  const campos = [];
+  const linhas = lista(bruto).map((o, linha) => {
+    const v = o?.valor;
+    let valor = null;
+    if (v !== null && v !== undefined && v !== '') {
+      const erro = regras.erroValorItem(v);
+      if (erro) campos.push({ campo: 'orc-valor', mensagem: erro, linha });
+      else valor = Number(v);
+    }
+    return { descricao: texto(o?.descricao, 300), qtd: numeroOuNulo(o?.qtd), valor };
+  });
+  if (campos.length) throw falha(400, 'validacao', 'Confira os valores do orçamento.', campos);
+  return linhas;
+}
+
 // Monta uma ficha só com os campos conhecidos. Anexos vêm sempre do registro guardado.
 function limparFicha(bruta, edital, anexos) {
   const f = bruta && typeof bruta === 'object' && !Array.isArray(bruta) ? bruta : {};
@@ -268,10 +285,7 @@ function limparFicha(bruta, edital, anexos) {
     extras,
     metas: lista(f.metas).map(m => ({ etapa: texto(m?.etapa, 200), inicio: texto(m?.inicio, 10), fim: texto(m?.fim, 10), acao: texto(m?.acao, 1000) })),
     equipe: lista(f.equipe).map(p => ({ nome: texto(p?.nome, 160), funcao: texto(p?.funcao, 160), documento: regras.somenteDigitos(p?.documento).slice(0, 14) })),
-    orcamento: lista(f.orcamento).map(o => {
-      const valor = numeroOuNulo(o?.valor);
-      return { descricao: texto(o?.descricao, 300), qtd: numeroOuNulo(o?.qtd), valor: valor === null ? null : Math.round(valor) };
-    }),
+    orcamento: lerOrcamento(f.orcamento),
     anexos: anexos || {},
     aceite: f.aceite === true,
   };

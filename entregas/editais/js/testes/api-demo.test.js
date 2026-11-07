@@ -634,3 +634,43 @@ test('modo servidor monta o pedido certo e converte erro em ErroApi', async () =
   assert.equal(f.status, 0);
   assert.equal(f.erro, 'sem_rede');
 });
+
+test('F2/F4: demonstração tem a mesma resposta do servidor para valor do item e teto', async () => {
+  const { limparFicha } = await import('../../servidor/rotas/proponente.js');
+  const { lerModeloEdital } = await import('../../servidor/rotas/gestor.js');
+  const edital = { camposExtras: [] };
+  const { api } = montar();
+  await entrarComo(api, MARINA);
+  const { inscricao } = await api.criarInscricao('ed-exemplo-001', {});
+  const resumo = e => ({ status: e.status, erro: e.erro, campos: e.campos });
+  const tentar = f => { try { f(); } catch (e) { return resumo(e); } return null; };
+
+  for (const valor of [1050, 10, -1, 10.5, 'abc']) {
+    const ficha = { orcamento: [{ descricao: 'Item', qtd: 1, valor }] };
+    let esperado = tentar(() => limparFicha(ficha, edital, {}));
+    let obtido;
+    try { obtido = (await api.salvarRascunho(inscricao.id, ficha)).inscricao.ficha.orcamento[0].valor; } catch (e) { obtido = resumo(e); }
+    if (esperado) assert.deepEqual(obtido, esperado, `valor ${valor}`);
+    else assert.equal(obtido, limparFicha(ficha, edital, {}).orcamento[0].valor, `valor ${valor}`);
+  }
+  assert.equal((await api.salvarRascunho(inscricao.id, { orcamento: [{ descricao: 'a', qtd: 1, valor: 1050 }] })).inscricao.ficha.orcamento[0].valor, 1050);
+  assert.equal((await api.salvarRascunho(inscricao.id, { orcamento: [{ descricao: 'a', qtd: 1, valor: 10 }] })).inscricao.ficha.orcamento[0].valor, 10);
+  const neg = await erroDe(api.salvarRascunho(inscricao.id, { orcamento: [{ descricao: 'a', qtd: 1, valor: -1 }] }));
+  assert.equal(neg.status, 400);
+  assert.equal(neg.erro, 'validacao');
+  assert.equal(neg.campos[0].mensagem, regras.erroValorItem(-1));
+  const frac = await erroDe(api.salvarRascunho(inscricao.id, { orcamento: [{ descricao: 'a', qtd: 1, valor: 10.5 }] }));
+  assert.equal(frac.campos[0].mensagem, regras.erroValorItem(10.5));
+
+  await entrarComo(api, GESTOR);
+  const base = { numero: 'EX-7', titulo: 'Teto', inicio: '2026-01-01', fim: '2026-02-01' };
+  for (const teto of ['', 0, -1, 10.5, 'x']) {
+    const esperado = tentar(() => lerModeloEdital({ ...base, teto }));
+    const e = await erroDe(api.criarEdital({ ...base, teto }));
+    assert.deepEqual(resumo(e).campos.find(c => c.campo === 'teto'), esperado.campos.find(c => c.campo === 'teto'), `teto ${teto}`);
+    assert.equal(e.status, 400);
+    assert.ok(!/centavo/i.test(e.campos.find(c => c.campo === 'teto').mensagem));
+  }
+  const ok = await api.criarEdital({ ...base, teto: 1000000 });
+  assert.equal(ok.edital.teto, 1000000);
+});
