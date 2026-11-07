@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "previa-editais",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/portoes/servir.mjs", "entregas/editais", "4173"],
+      "port": 4173
+    }
+  ]
+}
