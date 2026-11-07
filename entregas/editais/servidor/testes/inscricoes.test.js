@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
-import { criarAmbiente, fichaValida, pdfMinimo } from './ajuda.js';
+import { corpoEdital, criarAmbiente, fichaValida, pdfMinimo } from './ajuda.js';
 
 let amb, gestor, prop, propB, slug;
 
@@ -199,6 +199,91 @@ test('S9: anexo nunca sai por caminho público e o download exige sessão e aces
   assert.equal((await gestor.pedir('GET', `/api/anexos/${anexoId}`)).status, 200);
 });
 
+test('F1: estáticos do front saem, inclusive /img/, e o resto continua bloqueado', async () => {
+  const anon = amb.cliente();
+  const logo = await anon.pedir('GET', '/img/logo.png');
+  assert.equal(logo.status, 200);
+  assert.equal(logo.cabecalhos.get('content-type'), 'image/png');
+  assert.ok(logo.bytes.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])));
+  const head = await anon.pedir('HEAD', '/img/logo.png');
+  assert.equal(head.status, 200);
+  assert.equal(head.cabecalhos.get('content-type'), 'image/png');
+  const pdf = await anon.pedir('GET', '/exemplos/edital-exemplo.pdf');
+  assert.equal(pdf.status, 200);
+  assert.equal(pdf.cabecalhos.get('content-type'), 'application/pdf');
+  for (const [caminho, tipo] of [['/', /text\/html/], ['/index.html', /text\/html/], ['/js/app.js', /text\/javascript/]]) {
+    const x = await anon.pedir('GET', caminho);
+    assert.equal(x.status, 200, caminho);
+    assert.match(x.cabecalhos.get('content-type'), tipo, caminho);
+  }
+  const folhas = (await readdir(new URL('../../css/', import.meta.url))).filter(n => n.endsWith('.css'));
+  const css = await anon.pedir('GET', `/css/${folhas[0]}`);
+  assert.equal(css.status, 200);
+  assert.match(css.cabecalhos.get('content-type'), /text\/css/);
+  for (const caminho of [
+    '/img/%2e%2e/servidor/app.js', '/img/..%2fservidor%2fapp.js', '/img/../package.json', '/img/.oculto', '/img/%2eoculto',
+    '/img/', '/img', '/js/testes/regras.test.js', '/servidor/app.js', '/img/..%5cservidor%5capp.js',
+  ]) {
+    const x = await anon.pedir('GET', caminho);
+    assert.equal(x.status, 404, `${caminho} deu ${x.status}`);
+  }
+});
+
+test('F2: valor do item é guardado em centavos, sem arredondar', async () => {
+  const id = await rascunho();
+  const orcamento = [{ descricao: 'Lanche', qtd: 1, valor: 1050 }, { descricao: 'Bala', qtd: 3, valor: 10 }];
+  const r = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: fichaValida({ orcamento }) });
+  assert.equal(r.status, 200);
+  assert.deepEqual(r.corpo.inscricao.ficha.orcamento.map(o => o.valor), [1050, 10]);
+  const ver = await prop.pedir('GET', `/api/inscricoes/${id}`);
+  assert.deepEqual(ver.corpo.inscricao.ficha.orcamento.map(o => o.valor), [1050, 10]);
+  const env = await prop.pedir('POST', `/api/inscricoes/${id}/enviar`, { ficha: fichaValida({ orcamento }) });
+  assert.equal(env.status, 200);
+  const { linhas } = await amb.banco.executar('SELECT ficha FROM inscricoes WHERE id = ?', [id]);
+  assert.deepEqual(JSON.parse(linhas[0].ficha).orcamento.map(o => o.valor), [1050, 10]);
+});
+
+test('F2: valor negativo, fracionado em centavos ou texto dá 400 validacao e não grava', async () => {
+  const id = await rascunho();
+  for (const [valor, mensagem] of [
+    [-1, 'Valor do item não pode ser negativo'],
+    [10.5, 'Valor do item inválido. Use no máximo dois decimais.'],
+    [0.1, 'Valor do item inválido. Use no máximo dois decimais.'],
+    ['abc', 'Valor do item inválido.'],
+  ]) {
+    const orcamento = [{ descricao: 'Ok', qtd: 1, valor: 500 }, { descricao: 'Ruim', qtd: 1, valor }];
+    const r = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: fichaValida({ orcamento }) });
+    assert.equal(r.status, 400, String(valor));
+    assert.equal(r.corpo.erro, 'validacao');
+    assert.deepEqual(r.corpo.campos, [{ campo: 'orc-valor', mensagem, linha: 1 }]);
+    const env = await prop.pedir('POST', `/api/inscricoes/${id}/enviar`, { ficha: fichaValida({ orcamento }) });
+    assert.equal(env.status, 400);
+    assert.equal(env.corpo.erro, 'validacao');
+  }
+  const ver = await prop.pedir('GET', `/api/inscricoes/${id}`);
+  assert.equal(ver.corpo.inscricao.situacao, 'rascunho');
+  assert.equal(ver.corpo.inscricao.ficha.titulo, 'Rascunho');
+  const vazio = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: { titulo: 'Parcial', orcamento: [{ descricao: 'A definir', qtd: 1, valor: '' }] } });
+  assert.equal(vazio.status, 200);
+  assert.equal(vazio.corpo.inscricao.ficha.orcamento[0].valor, null);
+});
+
+test('F4: teto do edital recusado com mensagem em reais', async () => {
+  for (const [teto, mensagem] of [
+    ['', 'Campo obrigatório: Teto do orçamento (R$)'],
+    [-500, 'O teto precisa ser maior que R$ 0,00.'],
+    [0, 'O teto precisa ser maior que R$ 0,00.'],
+    [10.5, 'Teto inválido. Informe o valor em reais, como 10.000,00.'],
+  ]) {
+    const r = await gestor.pedir('POST', '/api/gestor/editais', corpoEdital(amb.relogio, { numero: `TETO-${String(teto)}`, teto }));
+    assert.equal(r.status, 400, String(teto));
+    const campo = r.corpo.campos.find(c => c.campo === 'teto');
+    assert.equal(campo.mensagem, mensagem);
+    assert.ok(!/centavo/i.test(campo.mensagem));
+  }
+});
+
+// Fica por último: encerra o edital usado pelos testes acima.
 test('edital encerrado não aceita inscrição nem envio', async () => {
   const id = await rascunho();
   assert.equal((await gestor.pedir('POST', `/api/gestor/editais/${slug}/encerrar`, {})).status, 200);
@@ -208,3 +293,4 @@ test('edital encerrado não aceita inscrição nem envio', async () => {
   const enviar = await prop.pedir('POST', `/api/inscricoes/${id}/enviar`, { ficha: fichaValida() });
   assert.equal(enviar.corpo.erro, 'edital_fechado');
 });
+

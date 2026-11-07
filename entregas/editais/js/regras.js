@@ -109,6 +109,25 @@ export function mensagemTeto(total, teto) {
   return null;
 }
 
+// Valor unitário de item do orçamento, em centavos inteiros. Devolve a mensagem de erro ou null.
+export function erroValorItem(valor) {
+  if (vazio(valor)) return obrigatorio('Valor do item');
+  const n = typeof valor === 'boolean' ? NaN : Number(valor);
+  if (!Number.isFinite(n)) return 'Valor do item inválido.';
+  if (n < 0) return 'Valor do item não pode ser negativo';
+  if (!Number.isInteger(n)) return 'Valor do item inválido. Use no máximo dois decimais.';
+  return null;
+}
+
+// Teto do edital, em centavos inteiros. A mensagem fala em reais, como o campo da tela.
+export function erroTeto(teto) {
+  if (vazio(teto)) return obrigatorio('Teto do orçamento (R$)');
+  const n = typeof teto === 'boolean' ? NaN : Number(teto);
+  if (!Number.isFinite(n) || !Number.isInteger(n)) return 'Teto inválido. Informe o valor em reais, como 10.000,00.';
+  if (n <= 0) return 'O teto precisa ser maior que R$ 0,00.';
+  return null;
+}
+
 function vazio(v) {
   if (v === null || v === undefined) return true;
   if (typeof v === 'string') return v.trim() === '';
@@ -153,8 +172,8 @@ export function validarFicha(edital, ficha) {
     if (vazio(o?.descricao)) erros.push({ campo: 'orc-descricao', mensagem: obrigatorio('Descrição do item'), linha });
     const qtd = Number(o?.qtd);
     if (vazio(o?.qtd) || !Number.isFinite(qtd) || qtd <= 0) erros.push({ campo: 'orc-qtd', mensagem: obrigatorio('Quantidade maior que zero'), linha });
-    const valor = Number(o?.valor);
-    if (vazio(o?.valor) || !Number.isFinite(valor) || valor < 0) erros.push({ campo: 'orc-valor', mensagem: obrigatorio('Valor do item'), linha });
+    const erroValor = erroValorItem(o?.valor);
+    if (erroValor) erros.push({ campo: 'orc-valor', mensagem: erroValor, linha });
   });
   if (f.aceite !== true) erros.push({ campo: 'aceite', mensagem: obrigatorio('Aceite dos termos do edital') });
   return erros;

@@ -33,9 +33,8 @@ export function lerModeloEdital(c) {
   if (!regras.dataValida(inicio)) campos.push({ campo: 'inicio', mensagem: 'Campo obrigatório: Início' });
   if (!regras.dataValida(fim)) campos.push({ campo: 'fim', mensagem: 'Campo obrigatório: Fim' });
   else if (regras.dataValida(inicio) && fim < inicio) campos.push({ campo: 'fim', mensagem: 'O fim precisa ser depois do início.' });
-  if (c.teto === null || c.teto === undefined || c.teto === '' || !Number.isInteger(teto) || teto <= 0) {
-    campos.push({ campo: 'teto', mensagem: 'Campo obrigatório: Teto, em centavos e maior que zero' });
-  }
+  const erroTeto = regras.erroTeto(c.teto);
+  if (erroTeto) campos.push({ campo: 'teto', mensagem: erroTeto });
   const categorias = listaDeNomes(c.categorias, 'categorias', 'Categoria', campos);
   const cotas = listaDeNomes(c.cotas, 'cotas', 'Cota', campos);
 

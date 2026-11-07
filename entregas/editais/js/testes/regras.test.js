@@ -96,6 +96,38 @@ test('S7: validarFicha aceita ficha completa e confere as linhas', () => {
   assert.deepEqual(erros.map(e => `${e.campo}:${e.linha}`).sort(), ['equipe-funcao:0', 'meta-acao:0', 'meta-etapa:0', 'orc-qtd:0', 'orc-valor:0']);
 });
 
+test('F5: valor do item negativo tem mensagem própria, vazio continua obrigatório', () => {
+  assert.equal(r.erroValorItem(-1), 'Valor do item não pode ser negativo');
+  assert.equal(r.erroValorItem(-500), 'Valor do item não pode ser negativo');
+  assert.equal(r.erroValorItem(''), 'Campo obrigatório: Valor do item');
+  assert.equal(r.erroValorItem(null), 'Campo obrigatório: Valor do item');
+  assert.equal(r.erroValorItem(10.5), 'Valor do item inválido. Use no máximo dois decimais.');
+  assert.equal(r.erroValorItem('abc'), 'Valor do item inválido.');
+  assert.equal(r.erroValorItem(true), 'Valor do item inválido.');
+  assert.equal(r.erroValorItem(0), null);
+  assert.equal(r.erroValorItem(1050), null);
+  assert.equal(r.erroValorItem(r.reaisParaCentavos('10,50')), null);
+  assert.equal(r.erroValorItem(r.reaisParaCentavos('0,10')), null);
+  const base = { titulo: 'T', categoria: 'Teatro', cota: 'Ampla concorrência', extras: { 'extra-resumo': 'R' }, aceite: true, metas: [], equipe: [] };
+  const neg = r.validarFicha(edital, { ...base, orcamento: [{ descricao: 'X', qtd: 3, valor: -500 }] });
+  assert.deepEqual(neg, [{ campo: 'orc-valor', mensagem: 'Valor do item não pode ser negativo', linha: 0 }]);
+  const vaz = r.validarFicha(edital, { ...base, orcamento: [{ descricao: 'X', qtd: 3, valor: null }] });
+  assert.deepEqual(vaz, [{ campo: 'orc-valor', mensagem: 'Campo obrigatório: Valor do item', linha: 0 }]);
+  const cent = r.validarFicha(edital, { ...base, orcamento: [{ descricao: 'X', qtd: 1, valor: 1050 }, { descricao: 'Y', qtd: 1, valor: 10 }] });
+  assert.deepEqual(cent, []);
+  assert.equal(r.totalOrcamento([{ qtd: 1, valor: 1050 }, { qtd: 1, valor: 10 }]), 1060);
+});
+
+test('F4: mensagem do teto fala em reais, não em centavos', () => {
+  assert.equal(r.erroTeto(''), 'Campo obrigatório: Teto do orçamento (R$)');
+  assert.equal(r.erroTeto(null), 'Campo obrigatório: Teto do orçamento (R$)');
+  assert.equal(r.erroTeto(-500), 'O teto precisa ser maior que R$ 0,00.');
+  assert.equal(r.erroTeto(0), 'O teto precisa ser maior que R$ 0,00.');
+  assert.equal(r.erroTeto(10.5), 'Teto inválido. Informe o valor em reais, como 10.000,00.');
+  assert.equal(r.erroTeto(1000000), null);
+  for (const v of ['', -1, 0, 1.5, 'x']) assert.ok(!/centavo/i.test(r.erroTeto(v)));
+});
+
 const criterios = [
   { chave: 'qualidade', nome: 'Qualidade', maximo: 10, bonus: false },
   { chave: 'viabilidade', nome: 'Viabilidade', maximo: 10, bonus: false },

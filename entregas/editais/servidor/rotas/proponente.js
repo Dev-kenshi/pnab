@@ -16,6 +16,24 @@ const numeroOuNulo = v => {
   return Number.isFinite(n) ? n : null;
 };
 
+// Orçamento: o valor unitário trafega em centavos inteiros e é guardado sem arredondar.
+// Vazio vira null (rascunho parcial). Negativo, fracionado ou não numérico dá 400.
+function lerOrcamento(bruto) {
+  const campos = [];
+  const linhas = lista(bruto).map((o, linha) => {
+    const v = o?.valor;
+    let valor = null;
+    if (v !== null && v !== undefined && v !== '') {
+      const erro = regras.erroValorItem(v);
+      if (erro) campos.push({ campo: 'orc-valor', mensagem: erro, linha });
+      else valor = Number(v);
+    }
+    return { descricao: texto(o?.descricao, 300), qtd: numeroOuNulo(o?.qtd), valor };
+  });
+  if (campos.length) throw falha(400, 'validacao', 'Confira os valores do orçamento.', campos);
+  return linhas;
+}
+
 // Monta uma ficha só com os campos conhecidos. Anexos vêm sempre do servidor.
 export function limparFicha(bruta, edital, anexos) {
   const f = bruta && typeof bruta === 'object' && !Array.isArray(bruta) ? bruta : {};
@@ -36,10 +54,7 @@ export function limparFicha(bruta, edital, anexos) {
     extras,
     metas: lista(f.metas).map(m => ({ etapa: texto(m?.etapa, 200), inicio: texto(m?.inicio, 10), fim: texto(m?.fim, 10), acao: texto(m?.acao, 1000) })),
     equipe: lista(f.equipe).map(p => ({ nome: texto(p?.nome, 160), funcao: texto(p?.funcao, 160), documento: regras.somenteDigitos(p?.documento).slice(0, 14) })),
-    orcamento: lista(f.orcamento).map(o => {
-      const valor = numeroOuNulo(o?.valor);
-      return { descricao: texto(o?.descricao, 300), qtd: numeroOuNulo(o?.qtd), valor: valor === null ? null : Math.round(valor) };
-    }),
+    orcamento: lerOrcamento(f.orcamento),
     anexos: anexos || {},
     aceite: f.aceite === true,
   };

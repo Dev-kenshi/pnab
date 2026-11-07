@@ -18,6 +18,9 @@ import rotasPlataforma from './rotas/plataforma.js';
 
 const RAIZ_PADRAO = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 
+// Pastas do front servidas como arquivo. /servidor/, /js/testes/ e ocultos ficam de fora.
+const PASTAS_PUBLICAS = ['/css/', '/js/', '/img/', '/exemplos/'];
+
 const MIME = {
   '.html': 'text/html; charset=utf-8',
   '.css': 'text/css; charset=utf-8',
@@ -100,7 +103,7 @@ export function criarApp({
     try { p = decodeURIComponent(caminho); } catch { return false; }
     if (p.includes('\0') || p.includes('\\') || p.split('/').some(s => s === '..' || s.startsWith('.'))) return false;
     if (p === '/') p = '/index.html';
-    const permitido = p === '/index.html' || ((p.startsWith('/css/') || p.startsWith('/js/') || p.startsWith('/exemplos/')) && !p.startsWith('/js/testes/'));
+    const permitido = p === '/index.html' || (PASTAS_PUBLICAS.some(d => p.startsWith(d)) && !p.startsWith('/js/testes/'));
     if (!permitido) return false;
     const alvo = resolve(raiz, `.${p}`);
     if (!alvo.startsWith(raiz + sep)) return false;

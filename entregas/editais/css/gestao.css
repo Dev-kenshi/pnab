@@ -65,8 +65,8 @@
 .tabela thead th { background: var(--tinta); color: #fff; font-size: .8rem; letter-spacing: .05em; font-weight: 700; white-space: nowrap; }
 .tabela tbody tr:last-child td { border-bottom: none; }
 .tabela tbody tr:hover { background: #faf9f6; }
-.tabela .campo { margin: 0; min-width: 150px; }
-.tabela select { min-height: 40px; padding: 6px 10px; }
+.tabela .campo { margin: 0; min-width: 290px; }
+.tabela select { min-height: 40px; padding: 6px 28px 6px 10px; font-size: .92rem; width: 100%; min-width: 0; text-overflow: ellipsis; }
 .junto { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .junto .campo { flex: 1 1 140px; }
 .acoes-linha { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
@@ -90,6 +90,8 @@
   .tabela td::before { content: attr(data-rotulo); font-size: .75rem; font-weight: 700; letter-spacing: .04em; color: var(--tinta-suave); padding-top: 2px; }
   .tabela tbody tr td:last-child { border-bottom: none; }
   .tabela td .campo { min-width: 0; }
+  .tabela td:has(select) { grid-template-columns: minmax(0, 1fr); }
+  .tabela select { font-size: .9rem; }
   .linha-item .botao { width: auto; }
 }
 
@@ -98,4 +100,4 @@
   .barra-publicar .botao { width: 100%; }
 }
 
-.conjunto .grade-campos { align-items: end; }
+.conjunto .grade-campos { align-items: start; }

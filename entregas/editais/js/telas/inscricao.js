@@ -239,10 +239,18 @@ export async function renderNovaInscricao(ctx) {
   function atualizarOrcamento() {
     const linhas = lerOrcamento();
     [...tOrc.corpo.children].forEach((tr, i) => {
-      const total = Math.round((Number(linhas[i].qtd) || 0) * (Number(linhas[i].valor) || 0));
+      const inputValor = tr.querySelector("[data-campo='orc-valor']");
+      tr.querySelectorAll("[data-erro='negativo']").forEach(e => e.remove());
+      if (Number(linhas[i].valor) < 0) {
+        colocarErro(inputValor, 'negativo', 'Valor do item não pode ser negativo', 'orc-valor');
+        linhas[i].valor = 0;
+      } else if (inputValor.getAttribute('aria-invalid') && !tr.querySelector('.erro-dinamico')) {
+        inputValor.removeAttribute('aria-invalid');
+      }
+      const total = Math.max(0, Math.round((Number(linhas[i].qtd) || 0) * (Number(linhas[i].valor) || 0)));
       tr.querySelector('.valor-linha').textContent = fmt.moeda(total);
     });
-    const total = regras.totalOrcamento(linhas);
+    const total = Math.max(0, regras.totalOrcamento(linhas));
     totalEl.textContent = fmt.moeda(total);
     const msg = regras.mensagemTeto(total, edital.teto);
     const atual = alertaLugar.firstElementChild;
