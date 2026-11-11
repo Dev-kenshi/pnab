@@ -1,4 +1,5 @@
 // Rotas de acesso: sessão, documento, entrar, sair, criar conta, esqueci e redefinir senha, organizações.
+import { createHash, timingSafeEqual } from 'node:crypto';
 import * as regras from '../../js/regras.js';
 import { SQL_USUARIO, buscarUsuario, usuarioPublico } from '../banco.js';
 import {
@@ -17,10 +18,29 @@ export const texto = (v, max = 200) => (typeof v === 'string' ? v.trim().slice(0
 
 export function exigirDocumento(valor) {
   const d = regras.somenteDigitos(valor);
-  if (!d) throw falha(400, 'documento_obrigatorio', MSG_DOC_VAZIO);
+  // Vazio é obrigatório. Texto sem números (ex.: admin sem TEB_PLATAFORMA_LOGIN) é inválido.
+  if (!d && !(typeof valor === 'string' && valor.trim())) throw falha(400, 'documento_obrigatorio', MSG_DOC_VAZIO);
+  if (!d) throw falha(400, 'documento_invalido', MSG_DOC_INVALIDO);
   const v = regras.validarDocumento(d);
   if (!v.valido) throw falha(400, 'documento_invalido', MSG_DOC_INVALIDO);
   return v.digitos;
+}
+
+const resumo = t => createHash('sha256').update(t).digest();
+
+// Recurso de teste, desligado por padrão: com TEB_PLATAFORMA_LOGIN, o apelido (ex.: admin) vale como o
+// documento da conta da plataforma. Compara sem diferenciar maiúsculas e em tempo constante.
+// loginPlataforma: { usuario, documento } ou null. Devolve o documento da plataforma ou null.
+export function documentoDoApelido(loginPlataforma, valor) {
+  if (!loginPlataforma || typeof valor !== 'string') return null;
+  const t = valor.trim().toLowerCase();
+  if (!t || t.length > 40) return null;
+  return timingSafeEqual(resumo(t), resumo(loginPlataforma.usuario)) ? loginPlataforma.documento : null;
+}
+
+// Documento das rotas de login: aceita o apelido da plataforma quando ligado, senão exige CPF ou CNPJ.
+function documentoDoLogin(ctx, valor) {
+  return documentoDoApelido(ctx.loginPlataforma, valor) || exigirDocumento(valor);
 }
 
 // Regras comuns a toda criação de conta e troca de senha.
@@ -102,7 +122,7 @@ export default [
         await ctx.auditar('limite_excedido', { alvo: 'documento' });
         throw falha(429, 'limite', MSG_LIMITE);
       }
-      const digitos = exigirDocumento(ctx.corpo.documento);
+      const digitos = documentoDoLogin(ctx, ctx.corpo.documento);
       return { corpo: { existe: await documentoExiste(ctx.banco, digitos) } };
     },
   },
@@ -110,12 +130,14 @@ export default [
     metodo: 'POST', caminho: '/api/acesso/entrar', papel: 'publico',
     fn: async ctx => {
       const { banco, agora, ip } = ctx;
-      const digitos = exigirDocumento(ctx.corpo.documento);
+      const digitos = documentoDoLogin(ctx, ctx.corpo.documento);
+      // Na auditoria, marca quando a entrada usou o apelido de teste no lugar do documento.
+      const via = documentoDoApelido(ctx.loginPlataforma, ctx.corpo.documento) ? { detalhe: { via: 'apelido' } } : {};
       const senha = typeof ctx.corpo.senha === 'string' ? ctx.corpo.senha : '';
       // Um login por documento e por IP de cada vez: o erro é gravado antes do próximo ler o contador.
       return comTrava([`login-doc:${digitos}`, `login-ip:${ip}`], async () => {
       if (await loginBloqueado(banco, { documento: digitos, ip, agora })) {
-        await ctx.auditar('login_bloqueado', { alvo: digitos });
+        await ctx.auditar('login_bloqueado', { alvo: digitos, ...via });
         throw falha(429, 'bloqueado', 'Muitas tentativas. Tente de novo em 15 minutos.');
       }
       const { linhas } = await banco.executar(`${SQL_USUARIO} WHERE u.documento = ?`, [digitos]);
@@ -123,7 +145,7 @@ export default [
       const certa = usuario ? await verificarSenha(senha, usuario.senha_hash) : await verificarSenhaFicticia(senha);
       if (!certa) {
         await banco.transacao(tx => registrarErroLogin(tx, { documento: digitos, ip, agora }));
-        await ctx.auditar('login_falha', { alvo: digitos, usuarioId: usuario?.id ?? null, organizacaoId: usuario?.organizacao_id ?? null });
+        await ctx.auditar('login_falha', { alvo: digitos, usuarioId: usuario?.id ?? null, organizacaoId: usuario?.organizacao_id ?? null, ...via });
         throw falha(401, 'senha_incorreta', 'Senha incorreta.');
       }
       await zerarErrosDocumento(banco, digitos);
@@ -132,7 +154,7 @@ export default [
         await banco.executar('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [await hashSenha(senha), usuario.id]);
       }
       const cookie = await abrirSessao(ctx, usuario.id);
-      await ctx.auditar('login', { usuarioId: usuario.id, organizacaoId: usuario.organizacao_id, alvo: digitos });
+      await ctx.auditar('login', { usuarioId: usuario.id, organizacaoId: usuario.organizacao_id, alvo: digitos, ...via });
       return { corpo: { usuario: usuarioPublico(usuario) }, cabecalhos: { 'Set-Cookie': cookie } };
       });
     },

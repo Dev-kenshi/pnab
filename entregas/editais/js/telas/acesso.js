@@ -28,13 +28,20 @@ function contasDemo() {
 
 export async function renderLogin(ctx) {
   const { raiz, api, params, navegar } = ctx;
-  const doc = campo({ rotulo: 'CPF ou CNPJ', nome: 'documento', inputmode: 'numeric', autocomplete: 'username', dica: 'Pode digitar com ou sem pontos e traços.' });
+  // No modo servidor o campo também aceita um usuário de teste (TEB_PLATAFORMA_LOGIN), conferido só no servidor.
+  const servidor = api.modo === 'servidor';
+  const doc = campo({
+    rotulo: servidor ? 'CPF, CNPJ ou usuário' : 'CPF ou CNPJ', nome: 'documento', inputmode: servidor ? undefined : 'numeric',
+    autocomplete: 'username', dica: 'Pode digitar com ou sem pontos e traços.',
+  });
   const senha = campo({ rotulo: 'Senha', nome: 'senha', tipo: 'password', autocomplete: 'current-password' });
   const etapaSenha = el('div', { 'data-etapa': 'senha', hidden: true }, senha.raiz);
   const avancar = el('button', { type: 'submit', class: 'botao botao-principal', 'data-acao': 'avancar' }, 'Avançar');
   const entrar = el('button', { type: 'submit', class: 'botao botao-principal', 'data-acao': 'entrar', hidden: true }, 'Entrar');
   const trocar = el('button', { type: 'button', class: 'botao botao-link', hidden: true }, 'Trocar documento');
   let etapa = 1;
+  // O que vai para o servidor: os dígitos do documento ou o usuário digitado.
+  let identificador = '';
 
   const voltarEtapa1 = () => {
     etapa = 1;
@@ -50,10 +57,14 @@ export async function renderLogin(ctx) {
     const texto = doc.input.value.trim();
     if (!texto) { mostrarErro(doc.erro, 'Documento obrigatório.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
     const v = validarDocumento(texto);
-    if (!v.valido) { mostrarErro(doc.erro, 'Documento inválido. Confira os números.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
+    // Texto com letra no modo servidor vai como usuário, sem conferir dígito. A demonstração segue só com documento.
+    const usuario = servidor && !v.valido && /\p{L}/u.test(texto);
+    if (!v.valido && !usuario) { mostrarErro(doc.erro, 'Documento inválido. Confira os números.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
+    identificador = usuario ? texto : v.digitos;
     avancar.disabled = true;
     try {
-      const r = await api.verificarDocumento(v.digitos);
+      const r = await api.verificarDocumento(identificador);
+      if (!r.existe && usuario) { mostrarErro(doc.erro, 'Usuário não encontrado.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
       if (!r.existe) {
         documentoPendente = v.digitos;
         navegar(`#/criar-conta${sufixoOrg(params)}`);
@@ -74,7 +85,7 @@ export async function renderLogin(ctx) {
     if (!senha.input.value) { mostrarErro(senha.erro, 'Informe a senha.'); return; }
     entrar.disabled = true;
     try {
-      const { usuario } = await api.entrar(validarDocumento(doc.input.value).digitos, senha.input.value);
+      const { usuario } = await api.entrar(identificador, senha.input.value);
       sessionStorage.setItem(AVISO_PENDENTE, '1');
       navegar(inicioDoPapel(usuario.papel));
     } catch (e) {

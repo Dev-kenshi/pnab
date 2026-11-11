@@ -99,7 +99,8 @@ export function fichaValida(extra = {}) {
   };
 }
 
-export async function criarAmbiente({ https = false } = {}) {
+// loginPlataforma: texto do usuário de teste (ex.: 'admin'). Liga TEB_PLATAFORMA_LOGIN para a conta da plataforma.
+export async function criarAmbiente({ https = false, loginPlataforma = null } = {}) {
   const pasta = await mkdtemp(join(tmpdir(), 'teb-teste-'));
   const banco = await abrirBanco({ caminho: join(pasta, 'teb.sqlite') });
   const pastaAnexos = join(pasta, 'anexos');
@@ -110,7 +111,10 @@ export async function criarAmbiente({ https = false } = {}) {
     avancar: ms => { atual += ms; },
   };
   const emails = [];
+  // O documento é preenchido abaixo, quando a conta da plataforma é criada.
+  const login = loginPlataforma ? { usuario: loginPlataforma.toLowerCase(), documento: '' } : null;
   const app = criarApp({
+    loginPlataforma: login,
     banco,
     anexos,
     agora: relogio.agora,
@@ -148,6 +152,7 @@ export async function criarAmbiente({ https = false } = {}) {
     id: await inserirUsuario(banco, { organizacaoId: null, papel: 'plataforma', nome: 'Plataforma de teste', documento: docPlataforma, email: 'plataforma@teste.example', senha: SENHA, agora: relogio.agora() }),
     documento: docPlataforma,
   };
+  if (login) login.documento = docPlataforma;
 
   let ipSeq = 1;
   const cliente = (opcoes = {}) => criarCliente(base, { ip: `10.1.0.${ipSeq++}`, ...opcoes });

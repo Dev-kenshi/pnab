@@ -3,7 +3,8 @@
 //
 // Uso:
 //   node servidor/principal.js                    sobe o servidor
-//   node servidor/principal.js criar-plataforma   cria a conta da plataforma
+//   node servidor/principal.js criar-plataforma   cria a conta da plataforma (se já existe, só avisa)
+//   node servidor/principal.js garantir-plataforma  o mesmo, para rodar a cada subida (Replit)
 //   node servidor/principal.js backup             faz o backup cifrado nos destinos configurados
 //   node servidor/principal.js criar-pasta-drive  cria a pasta do backup no Google Drive e mostra o ID
 //   node servidor/principal.js restaurar <destino> [nome-do-backup]
@@ -14,7 +15,6 @@ import { rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import * as regras from '../js/regras.js';
 import { criarApp } from './app.js';
 import { emailDoAmbiente } from './email.js';
 import { registrar } from './auditoria.js';
@@ -23,8 +23,8 @@ import { criarArmazemDisco, lerChave } from './anexos.js';
 import { lerChaveBackup } from './backup/cifra.js';
 import { destinosDoAmbiente, googleDrive } from './backup/destinos.js';
 import { fazerBackup, listarBackups, restaurar } from './backup/rotina.js';
-import { DOCUMENTOS_RESERVADOS, SENHA_PROIBIDA, ipPadrao } from './seguranca.js';
-import { inserirUsuario } from './rotas/acesso.js';
+import { ipPadrao } from './seguranca.js';
+import { garantirContaPlataforma, loginPlataformaDoAmbiente } from './conta-plataforma.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arquivoEnv = resolve(RAIZ, '.env');
@@ -46,23 +46,15 @@ async function abrir() {
   });
 }
 
+// criar-plataforma e garantir-plataforma: idempotentes. Se a conta já existe, só avisa e sai com código 0.
 async function criarPlataforma() {
-  const documento = regras.somenteDigitos(env.TEB_PLATAFORMA_DOCUMENTO);
-  const nome = String(env.TEB_PLATAFORMA_NOME || '').trim();
-  const email = String(env.TEB_PLATAFORMA_EMAIL || '').trim().toLowerCase();
-  const senha = env.TEB_PLATAFORMA_SENHA || '';
-  if (!regras.validarDocumento(documento).valido) sair('TEB_PLATAFORMA_DOCUMENTO precisa ser um CPF ou CNPJ válido.');
-  if (DOCUMENTOS_RESERVADOS.has(documento)) sair('Esse documento é reservado para o modo demonstração.');
-  if (!nome || !email) sair('Preencha TEB_PLATAFORMA_NOME e TEB_PLATAFORMA_EMAIL.');
-  if (senha === SENHA_PROIBIDA) sair('Essa senha é de demonstração. Escolha outra.');
-  const msg = regras.validarSenha(senha, { papel: 'plataforma', documento, nome, email });
-  if (msg) sair(msg);
   const banco = await abrir();
-  const agora = new Date();
-  const id = await inserirUsuario(banco, { organizacaoId: null, papel: 'plataforma', nome, documento, email, senha, agora });
-  await registrar(banco, { agora, usuarioId: id, acao: 'conta_criada', alvo: documento, detalhe: { papel: 'plataforma' }, ip: 'linha-de-comando' });
-  await banco.fechar();
-  console.log(`Conta da plataforma criada para ${nome}. Apague TEB_PLATAFORMA_SENHA do ambiente depois do primeiro acesso.`);
+  try {
+    const r = await garantirContaPlataforma(banco, env);
+    console.log(r.criada ? `${r.mensagem} Guarde TEB_PLATAFORMA_SENHA só nos Secrets, nunca no código.` : r.mensagem);
+  } finally {
+    await banco.fechar();
+  }
 }
 
 function configBackup() {
@@ -138,7 +130,15 @@ async function criarPastaDrive() {
 async function servir() {
   let chave;
   try { chave = lerChave(env.TEB_CHAVE_ANEXOS); } catch (e) { sair(e.message); }
+  let loginPlataforma;
+  try { loginPlataforma = loginPlataformaDoAmbiente(env); } catch (e) { sair(e.message); }
   const banco = await abrir();
+  // Com TEB_PLATAFORMA_SENHA no ambiente, a subida garante a conta. Se já existe, só avisa.
+  // Configuração errada para a subida com a mensagem, para não ficar escondida.
+  if (env.TEB_PLATAFORMA_SENHA) {
+    try { console.log(`[plataforma] ${(await garantirContaPlataforma(banco, env, { ip: 'subida' })).mensagem}`); } catch (e) { await banco.fechar(); sair(`[plataforma] ${e.message}`); }
+  }
+  if (loginPlataforma) console.log(`[plataforma] Login de teste ligado: usuário "${loginPlataforma.usuario}". Desligue apagando TEB_PLATAFORMA_LOGIN.`);
   const anexos = criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave });
   const porta = Number(env.PORTA || 3000);
   let enviarEmail;
@@ -149,6 +149,7 @@ async function servir() {
     anexos,
     https: env.TEB_HTTPS === '1',
     ipDe: ipPadrao({ confiarProxy: env.TEB_CONFIAR_PROXY === '1' }),
+    loginPlataforma,
     urlPublica: String(env.TEB_URL_PUBLICA || `http://localhost:${porta}`).replace(/\/+$/, ''),
   });
   const servidor = createServer({ requestTimeout: 60000, headersTimeout: 20000 }, app);
@@ -168,7 +169,7 @@ async function servir() {
 }
 
 const comando = process.argv[2];
-if (comando === 'criar-plataforma') await criarPlataforma().catch(e => sair(e.message));
+if (comando === 'criar-plataforma' || comando === 'garantir-plataforma') await criarPlataforma().catch(e => sair(e.message));
 else if (comando === 'backup') await backup().catch(e => sair(e.message));
 else if (comando === 'criar-pasta-drive') await criarPastaDrive().catch(e => sair(e.message));
 else if (comando === 'restaurar') await restaurarComando(process.argv[3], process.argv[4]).catch(e => sair(e.message));

@@ -115,7 +115,7 @@ Guarde tudo num cofre de senhas, por exemplo o Bitwarden ou o 1Password. Nunca c
 |---|---|---|
 | `TEB_CHAVE_ANEXOS` | O comando abaixo | Segredo da hospedagem e cópia no cofre. Sem ela, os anexos não abrem. |
 | `TEB_CHAVE_BACKUP` | O mesmo comando, de novo, para ser diferente | Segredo da hospedagem e cópia no cofre, separada da outra |
-| Senha da plataforma (`TEB_PLATAFORMA_SENHA`) | Frase de 4 ou 5 palavras sem relação entre si, 16 caracteres ou mais (exemplo de formato, não use: `cadeira-nuvem-tambor-limão`). O sistema exige 12 caracteres ou mais, recusa senhas comuns e recusa o seu CPF, e-mail ou primeiro nome. | Use só no comando `criar-plataforma`. Depois do primeiro acesso, apague a variável. |
+| Senha da plataforma (`TEB_PLATAFORMA_SENHA`) | Frase de 4 ou 5 palavras sem relação entre si, 16 caracteres ou mais (exemplo de formato, não use: `cadeira-nuvem-tambor-limão`). O sistema exige 12 caracteres ou mais, recusa senhas comuns e recusa o seu CPF, e-mail ou primeiro nome. | Use no comando `criar-plataforma` ou nos Secrets do Replit. Depois do primeiro acesso, apague a variável, salvo no teste com `TEB_PLATAFORMA_LOGIN`. |
 | Senhas de gestores e avaliadores | A mesma regra: 12 caracteres ou mais. Cada pessoa troca a senha no primeiro acesso, em "Minha conta". | Cada pessoa guarda a sua |
 | Tokens do Google Drive, do B2, do GitHub e do Resend | Painel de cada serviço, com o menor acesso possível (veja `docs/backups.md`) | Segredos da hospedagem, com data de renovação anotada |
 
@@ -129,6 +129,18 @@ Regras práticas:
 - Uma senha por serviço. Nunca reaproveite.
 - Ligue a verificação em duas etapas nas contas Google, Backblaze, GitHub, Resend e da hospedagem.
 - Se uma chave ou senha vazar, troque na hora. Para trocar `TEB_CHAVE_ANEXOS`, é preciso recifrar os anexos (não há comando para isso ainda). Por isso, guarde bem essa chave.
+
+## Login de teste com usuário (opcional, desligado por padrão)
+
+Recurso só para teste. Sem a variável `TEB_PLATAFORMA_LOGIN`, nada muda.
+
+- **Como ligar.** Coloque `TEB_PLATAFORMA_LOGIN=admin` e preencha `TEB_PLATAFORMA_DOCUMENTO`. A senha vai em `TEB_PLATAFORMA_SENHA`, nos Secrets do Replit. Ela nunca vai para o código nem para o Git.
+- **O que faz.** Na tela de login, o usuário `admin` vale como o CPF da conta da plataforma, sem diferenciar maiúsculas. O servidor confere esse texto nas rotas `/api/acesso/documento` e `/api/acesso/entrar`.
+- **O que continua igual.** Limite de tentativas, trava por documento e por IP, tempo constante e auditoria. Na auditoria, a entrada pelo usuário fica marcada com `via: apelido`.
+- **Conta criada sozinha.** Com `TEB_PLATAFORMA_SENHA` no ambiente, a subida cria a conta da plataforma se faltar. Se já existe, só avisa. O comando `node servidor/principal.js garantir-plataforma` faz o mesmo.
+- **Atenção.** Trocar a senha nos Secrets não troca a senha de uma conta que já existe. Use "Esqueci minha senha" ou "Minha conta".
+- **Antes de usar de verdade.** Apague `TEB_PLATAFORMA_LOGIN`. Um nome previsível como `admin` facilita a vida de quem tenta adivinhar senhas.
+- **Modo demonstração.** Não aceita usuário. Só CPF ou CNPJ válido.
 
 ## Pendências e riscos conhecidos
 

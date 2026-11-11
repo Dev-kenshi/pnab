@@ -77,6 +77,8 @@ export function criarApp({
   buscarCepRemoto = cepViaCep,
   https = false,
   urlPublica = '',
+  // Recurso de teste: { usuario, documento } para entrar com apelido na conta da plataforma. null desliga.
+  loginPlataforma = null,
   raizEstatica = RAIZ_PADRAO,
 } = {}) {
   if (!banco) throw new Error('criarApp precisa de banco.');
@@ -167,7 +169,7 @@ export function criarApp({
         }
 
         const ctx = {
-          req, res, params, query: url.searchParams, agora: momento, ip, banco, anexos, enviarEmail, buscarCepRemoto, https, urlPublica,
+          req, res, params, query: url.searchParams, agora: momento, ip, banco, anexos, enviarEmail, buscarCepRemoto, https, urlPublica, loginPlataforma,
           usuario: sessao?.usuario || null,
           sessaoHash: sessao?.tokenHash || null,
           corpo: {},
