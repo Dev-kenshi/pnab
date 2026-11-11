@@ -1,4 +1,4 @@
-REPROVADO (rodada 2: TEB_GITHUB_INTERVALO_DIAS em branco vira 0 e envia o banco ao GitHub todo dia)
+APROVADO (rodada 3)
 
 # Teste da etapa de backups (commits 1a2399f a a713933)
 
@@ -128,3 +128,29 @@ Script: `node trabalho/editais/r4-backup-ataque.mjs`. Resultado: 33 de 33 ok.
 
 ## Limpeza
 - Criado: `trabalho/editais/r4-rodada2.mjs` (ignorado pelo git). Pasta `r4-cli-*` apagada. Nada na entrega foi editado. Sem commit nem push.
+
+# Rodada 3
+
+Veredito: APROVADO (rodada 3). Commit 3a52e88. Nenhuma falha nova.
+
+## Portões
+- `cd entregas/editais && npm test`: 127 de 127 passam.
+- `node scripts/portoes/portao-3.mjs entregas/editais`: APROVADO.
+- `node trabalho/editais/r4-backup-ataque.mjs`: 33 de 33 ok.
+- `node trabalho/editais/r4-rodada2.mjs`: sem FALHA. Trava fresca bloqueia, trava velha é descartada, falhas liberam a trava, dois backups juntos (um recusa), GitHub dia 1 enviado, dia 2 pulado, dia 8 enviado.
+
+## O que mudou, atacado
+Script: `node trabalho/editais/r4-rodada3.mjs`.
+- Falha da rodada 2 corrigida. Intervalo ausente, `""`, `"   "` e `"\t"` valem 7. `"0"` vale 0, `" 3 "` vale 3.
+- `abc`, `-1`, `1.5`, `NaN` e `Infinity` são recusados com mensagem clara.
+- A mensagem da trava traz o caminho: `Se nenhum estiver rodando, apague .../backup.trava.`
+- Trava com data 30 dias no futuro é descartada e o backup roda.
+- Sem regressão no restante.
+
+## Melhorias opcionais (não reprovam)
+- `"0x10"` vale 16 e `"1e1"` vale 10, porque `Number()` aceita esses formatos. Inofensivo.
+- O doc e o `.env.example` não dizem que 0 envia o banco ao GitHub em toda execução.
+- Restam as melhorias antigas: trava não renovada em backup acima de 6 h, B2 sem novo `b2_get_upload_url` em 401 ou 5xx, `fetch failed` sem causa.
+
+## Limpeza
+- Criado: `trabalho/editais/r4-rodada3.mjs` (ignorado pelo git). Nada na entrega foi editado. Sem commit nem push.
