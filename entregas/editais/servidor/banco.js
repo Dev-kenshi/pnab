@@ -187,7 +187,7 @@ export function abrirSqlite(caminho) {
   };
 }
 
-// Turso pela API HTTP v2. Sem SDK, só fetch. Sem teste automático.
+// Turso pela API HTTP v2. Sem SDK, só fetch. Testado com um Turso simulado em servidor/testes/turso.test.js.
 export async function abrirTurso({ url, token, fetch: f = globalThis.fetch }) {
   const base = String(url).replace(/^libsql:\/\//, 'https://').replace(/\/+$/, '');
   const arg = v => {
@@ -210,7 +210,14 @@ export async function abrirTurso({ url, token, fetch: f = globalThis.fetch }) {
     });
     if (!r.ok) throw new Error(`Turso respondeu ${r.status}`);
     const corpo = await r.json();
-    for (const item of corpo.results) if (item.type === 'error') throw new Error(item.error?.message || 'Erro no Turso');
+    for (const item of corpo.results) {
+      if (item.type === 'error') {
+        // O Turso troca o baton a cada resposta, mesmo com erro. Sem o novo, o ROLLBACK seria recusado.
+        const erro = new Error(item.error?.message || 'Erro no Turso');
+        erro.baton = corpo.baton;
+        throw erro;
+      }
+    }
     return corpo;
   };
   const converter = res => {
@@ -231,7 +238,13 @@ export async function abrirTurso({ url, token, fetch: f = globalThis.fetch }) {
     let baton = (await pipeline([stmt('BEGIN IMMEDIATE')])).baton;
     const tx = {
       executar: async (sql, params) => {
-        const r = await pipeline([stmt(sql, params)], baton);
+        let r;
+        try {
+          r = await pipeline([stmt(sql, params)], baton);
+        } catch (e) {
+          if (e.baton) baton = e.baton;
+          throw e;
+        }
         baton = r.baton;
         return converter(r.results[0].response.result);
       },

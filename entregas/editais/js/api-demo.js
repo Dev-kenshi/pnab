@@ -36,7 +36,12 @@ class ErroHttp extends Error {
 const falha = (status, erro, mensagem, campos) => new ErroHttp(status, erro, mensagem, campos);
 
 const texto = (v, max = 200) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
-const lista = (v, max = MAX_LINHAS) => (Array.isArray(v) ? v.slice(0, max) : []);
+// Tabela com mais linhas que o máximo é recusada com mensagem, em vez de cortada em silêncio.
+const lista = (v, max = MAX_LINHAS) => {
+  if (!Array.isArray(v)) return [];
+  if (v.length > max) throw falha(400, 'linhas_demais', `Cada tabela aceita no máximo ${max} linhas.`, [{ campo: 'tabela', mensagem: `Cada tabela aceita no máximo ${max} linhas.` }]);
+  return v;
+};
 const numeroOuNulo = v => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);

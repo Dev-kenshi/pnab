@@ -9,7 +9,12 @@ import { texto } from './acesso.js';
 
 const MAX_LINHAS = 200;
 
-const lista = (v, max = MAX_LINHAS) => (Array.isArray(v) ? v.slice(0, max) : []);
+// Tabela com mais linhas que o máximo é recusada com mensagem, em vez de cortada em silêncio.
+const lista = (v, max = MAX_LINHAS) => {
+  if (!Array.isArray(v)) return [];
+  if (v.length > max) throw falha(400, 'linhas_demais', `Cada tabela aceita no máximo ${max} linhas.`, [{ campo: 'tabela', mensagem: `Cada tabela aceita no máximo ${max} linhas.` }]);
+  return v;
+};
 const numeroOuNulo = v => {
   if (v === null || v === undefined || v === '') return null;
   const n = Number(v);

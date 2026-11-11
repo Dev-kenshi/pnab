@@ -132,6 +132,7 @@ test('F4: mensagem do teto fala em reais, não em centavos', () => {
     assert.equal(r.erroTeto(v), 'Teto acima do máximo de R$ 10.000.000,00.', String(v));
   }
   assert.equal(r.erroTeto(Infinity), 'Teto inválido. Informe o valor em reais, como 10.000,00.');
+  for (const v of [[5], { valor: 5 }, true]) assert.equal(r.erroTeto(v), 'Teto inválido. Informe o valor em reais, como 10.000,00.');
   for (const v of ['', -1, 0, 1.5, 'x']) assert.ok(!/centavo/i.test(r.erroTeto(v)));
 });
 

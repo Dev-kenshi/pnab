@@ -28,7 +28,10 @@ export class ErroHttp extends Error {
 export const falha = (status, erro, mensagem, campos) => new ErroHttp(status, erro, mensagem, campos);
 
 // Senha com scrypt. Sal aleatório de 16 bytes por senha.
-const N = 16384, R = 8, P = 1, TAMANHO = 64;
+// Parâmetros da recomendação da OWASP para scrypt: N=2^14, r=8, p=5 (16 MiB de memória por cálculo).
+// Hash com parâmetros antigos é refeito no próximo login certo (precisaRefazerHash).
+const N = 16384, R = 8, P = 5, TAMANHO = 64;
+const MAX_N = 1 << 17, MAX_R = 16, MAX_P = 16;
 
 export async function hashSenha(senha) {
   const sal = randomBytes(16);
@@ -40,9 +43,16 @@ export async function verificarSenha(senha, armazenado) {
   const partes = String(armazenado || '').split('$');
   if (partes.length !== 6 || partes[0] !== 'scrypt') return false;
   const [, n, r, p, salB64, hashB64] = partes;
+  const [nn, rr, pp] = [Number(n), Number(r), Number(p)];
+  if (!(nn > 1 && nn <= MAX_N && rr >= 1 && rr <= MAX_R && pp >= 1 && pp <= MAX_P)) return false;
   const esperado = Buffer.from(hashB64, 'base64');
-  const obtido = await scryptAsync(String(senha), Buffer.from(salB64, 'base64'), esperado.length, { N: Number(n), r: Number(r), p: Number(p) });
+  if (esperado.length < 32) return false;
+  const obtido = await scryptAsync(String(senha), Buffer.from(salB64, 'base64'), esperado.length, { N: nn, r: rr, p: pp, maxmem: 256 * MAX_N * MAX_R });
   return obtido.length === esperado.length && timingSafeEqual(obtido, esperado);
+}
+
+export function precisaRefazerHash(armazenado) {
+  return !String(armazenado || '').startsWith(`scrypt$${N}$${R}$${P}$`);
 }
 
 // Hash fixo para gastar o mesmo tempo quando o documento não tem conta.
@@ -93,6 +103,70 @@ export async function registrarErroLogin(banco, { documento, ip, agora }) {
   }
 }
 
+// Trava em memória por chave. Pedidos com a mesma chave (documento, IP, usuário) rodam um de cada vez.
+// Sem ela, vários logins em paralelo liam o contador antes de qualquer erro ser gravado e passavam do limite.
+// Vale para um processo só (SQLite local). Com várias instâncias, use um limitador na frente (proxy).
+const travas = new Map();
+export async function comTrava(chaves, fn) {
+  const ordenadas = [...new Set(chaves.map(String))].sort();
+  const liberar = [];
+  try {
+    for (const chave of ordenadas) {
+      const anterior = travas.get(chave) || Promise.resolve();
+      let soltar;
+      const atual = new Promise(ok => { soltar = ok; });
+      const cadeia = anterior.then(() => atual);
+      travas.set(chave, cadeia);
+      await anterior;
+      liberar.push(() => { soltar(); if (travas.get(chave) === cadeia) travas.delete(chave); });
+    }
+    return await fn();
+  } finally {
+    for (const l of liberar.reverse()) l();
+  }
+}
+
+// Limite de uso por janela de tempo (documento, esqueci a senha, senha atual).
+// Usa a mesma tabela do login com prefixos próprios. Aqui `bloqueado_ate` guarda o fim da janela.
+export const LIMITES = {
+  documentoPorIp: { prefixo: 'doc-ip', limite: 30, janelaMs: 15 * 60 * 1000 },
+  esqueciPorIp: { prefixo: 'esq-ip', limite: 10, janelaMs: 60 * 60 * 1000 },
+  esqueciPorDocumento: { prefixo: 'esq-doc', limite: 3, janelaMs: 60 * 60 * 1000 },
+  senhaAtualPorUsuario: { prefixo: 'senha-atual', limite: 5, janelaMs: 15 * 60 * 1000 },
+  criarContaPorIp: { prefixo: 'conta-ip', limite: 10, janelaMs: 60 * 60 * 1000 },
+};
+
+// Conta um uso. Devolve true se ainda está dentro do limite.
+export async function contarUso(banco, regra, alvo, agora) {
+  const chave = `${regra.prefixo}:${alvo}`;
+  const ms = agora.getTime();
+  return banco.transacao(async tx => {
+    const { linhas } = await tx.executar('SELECT erros, bloqueado_ate FROM tentativas_login WHERE chave = ?', [chave]);
+    const t = linhas[0];
+    const nova = !t || !t.bloqueado_ate || new Date(t.bloqueado_ate).getTime() <= ms;
+    const usos = nova ? 1 : Number(t.erros) + 1;
+    const fim = nova ? new Date(ms + regra.janelaMs).toISOString() : t.bloqueado_ate;
+    await tx.executar(
+      `INSERT INTO tentativas_login (chave, erros, bloqueado_ate, atualizado_em) VALUES (?, ?, ?, ?)
+       ON CONFLICT (chave) DO UPDATE SET erros = excluded.erros, bloqueado_ate = excluded.bloqueado_ate, atualizado_em = excluded.atualizado_em`,
+      [chave, usos, fim, agora.toISOString()],
+    );
+    return usos <= regra.limite;
+  });
+}
+
+// Só consulta, sem contar.
+export async function dentroDoLimite(banco, regra, alvo, agora) {
+  const { linhas } = await banco.executar('SELECT erros, bloqueado_ate FROM tentativas_login WHERE chave = ?', [`${regra.prefixo}:${alvo}`]);
+  const t = linhas[0];
+  if (!t || !t.bloqueado_ate || new Date(t.bloqueado_ate).getTime() <= agora.getTime()) return true;
+  return Number(t.erros) < regra.limite;
+}
+
+export async function zerarUso(banco, regra, alvo) {
+  await banco.executar('DELETE FROM tentativas_login WHERE chave = ?', [`${regra.prefixo}:${alvo}`]);
+}
+
 export async function zerarErrosDocumento(banco, documento) {
   await banco.executar('DELETE FROM tentativas_login WHERE chave = ?', [`doc:${documento}`]);
 }
@@ -121,11 +195,12 @@ export function cookieExpirado({ https }) {
   return attrs.join('; ');
 }
 
-// IP do cliente. X-Forwarded-For só com proxy confiável.
+// IP do cliente. X-Forwarded-For só com proxy confiável, e só o ÚLTIMO item:
+// é o que o proxy acrescentou. Os anteriores vêm do cliente e podem ser forjados.
 export function ipPadrao({ confiarProxy }) {
   return req => {
     if (confiarProxy) {
-      const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean).at(-1);
       if (xff) return xff;
     }
     return req.socket?.remoteAddress || 'desconhecido';
@@ -173,6 +248,19 @@ export async function lerJson(req) {
 
 export const CSP = "default-src 'self'; base-uri 'self'; form-action 'self'; object-src 'none'; frame-ancestors 'none'";
 
+// Defesa extra contra CSRF, além do SameSite=Strict e do JSON obrigatório:
+// pedido que muda dados e vem de outro site é recusado.
+export function origemConfiavel(req) {
+  if (String(req.headers['sec-fetch-site'] || '') === 'cross-site') return false;
+  const origem = req.headers.origin;
+  if (!origem) return true;
+  try {
+    return new URL(origem).host === String(req.headers.host || '');
+  } catch {
+    return false;
+  }
+}
+
 export function cabecalhosSeguranca(res, { https }) {
   res.setHeader('Content-Security-Policy', CSP);
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -181,5 +269,5 @@ export function cabecalhosSeguranca(res, { https }) {
   res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
   res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
-  if (https) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
+  if (https) res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 }

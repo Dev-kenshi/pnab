@@ -318,6 +318,16 @@ test('F7: teto absurdo dá 400 com mensagem, nunca 500', async () => {
   assert.equal(alto.status, 400);
 });
 
+test('planilha com mais de 200 linhas é recusada com mensagem, não cortada', async () => {
+  const id = await rascunho();
+  const orcamento = Array.from({ length: 201 }, (_, i) => ({ descricao: `Item ${i}`, qtd: 1, valor: 100 }));
+  const r = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: { titulo: 'Muitas linhas', orcamento } });
+  assert.equal(r.status, 400);
+  assert.equal(r.corpo.erro, 'linhas_demais');
+  const ok = await prop.pedir('PUT', `/api/inscricoes/${id}`, { ficha: { titulo: 'No limite', orcamento: orcamento.slice(0, 200) } });
+  assert.equal(ok.status, 200);
+});
+
 // Fica por último: encerra o edital usado pelos testes acima.
 test('edital encerrado não aceita inscrição nem envio', async () => {
   const id = await rascunho();

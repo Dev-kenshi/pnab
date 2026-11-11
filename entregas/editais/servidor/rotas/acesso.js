@@ -2,9 +2,11 @@
 import * as regras from '../../js/regras.js';
 import { SQL_USUARIO, buscarUsuario, usuarioPublico } from '../banco.js';
 import {
-  REDEFINICAO_MS, SENHA_PROIBIDA, SESSAO_MS, cookieExpirado, cookieSessao, documentoReservado, falha, gerarToken, hashSenha, hashToken,
-  loginBloqueado, registrarErroLogin, verificarSenha, verificarSenhaFicticia, zerarErrosDocumento,
+  LIMITES, REDEFINICAO_MS, SENHA_PROIBIDA, SESSAO_MS, comTrava, contarUso, cookieExpirado, cookieSessao, documentoReservado, falha, gerarToken,
+  hashSenha, hashToken, loginBloqueado, precisaRefazerHash, registrarErroLogin, verificarSenha, verificarSenhaFicticia, zerarErrosDocumento,
 } from '../seguranca.js';
+
+const MSG_LIMITE = 'Muitas tentativas. Tente de novo mais tarde.';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MSG_DOC_VAZIO = 'Documento obrigatório.';
@@ -95,6 +97,11 @@ export default [
   {
     metodo: 'POST', caminho: '/api/acesso/documento', papel: 'publico',
     fn: async ctx => {
+      // Limite por IP: dificulta varrer CPFs para descobrir quem tem conta.
+      if (!(await contarUso(ctx.banco, LIMITES.documentoPorIp, ctx.ip, ctx.agora))) {
+        await ctx.auditar('limite_excedido', { alvo: 'documento' });
+        throw falha(429, 'limite', MSG_LIMITE);
+      }
       const digitos = exigirDocumento(ctx.corpo.documento);
       return { corpo: { existe: await documentoExiste(ctx.banco, digitos) } };
     },
@@ -105,6 +112,8 @@ export default [
       const { banco, agora, ip } = ctx;
       const digitos = exigirDocumento(ctx.corpo.documento);
       const senha = typeof ctx.corpo.senha === 'string' ? ctx.corpo.senha : '';
+      // Um login por documento e por IP de cada vez: o erro é gravado antes do próximo ler o contador.
+      return comTrava([`login-doc:${digitos}`, `login-ip:${ip}`], async () => {
       if (await loginBloqueado(banco, { documento: digitos, ip, agora })) {
         await ctx.auditar('login_bloqueado', { alvo: digitos });
         throw falha(429, 'bloqueado', 'Muitas tentativas. Tente de novo em 15 minutos.');
@@ -118,9 +127,14 @@ export default [
         throw falha(401, 'senha_incorreta', 'Senha incorreta.');
       }
       await zerarErrosDocumento(banco, digitos);
+      // Senha guardada com parâmetros antigos do scrypt é refeita agora, com a senha certa em mãos.
+      if (precisaRefazerHash(usuario.senha_hash)) {
+        await banco.executar('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [await hashSenha(senha), usuario.id]);
+      }
       const cookie = await abrirSessao(ctx, usuario.id);
       await ctx.auditar('login', { usuarioId: usuario.id, organizacaoId: usuario.organizacao_id, alvo: digitos });
       return { corpo: { usuario: usuarioPublico(usuario) }, cabecalhos: { 'Set-Cookie': cookie } };
+      });
     },
   },
   {
@@ -134,6 +148,13 @@ export default [
     metodo: 'POST', caminho: '/api/acesso/criar-conta', papel: 'publico',
     fn: async ctx => {
       const c = ctx.corpo;
+      // A criação de conta também revela se o documento existe (409): conta no mesmo limite da consulta.
+      const dentroConta = await contarUso(ctx.banco, LIMITES.criarContaPorIp, ctx.ip, ctx.agora);
+      const dentroDoc = await contarUso(ctx.banco, LIMITES.documentoPorIp, ctx.ip, ctx.agora);
+      if (!dentroConta || !dentroDoc) {
+        await ctx.auditar('limite_excedido', { alvo: 'criar-conta' });
+        throw falha(429, 'limite', MSG_LIMITE);
+      }
       const { digitos, nome, email, campos } = validarDadosConta(c, { exigirConfirmacao: true });
       const natureza = texto(c.natureza, 40);
       const telefone = regras.somenteDigitos(c.telefone).slice(0, 15);
@@ -157,9 +178,15 @@ export default [
   {
     metodo: 'POST', caminho: '/api/acesso/esqueci-senha', papel: 'publico',
     fn: async ctx => {
+      if (!(await contarUso(ctx.banco, LIMITES.esqueciPorIp, ctx.ip, ctx.agora))) {
+        await ctx.auditar('limite_excedido', { alvo: 'esqueci-senha' });
+        throw falha(429, 'limite', MSG_LIMITE);
+      }
       const digitos = exigirDocumento(ctx.corpo.documento);
+      // Por documento, o limite é silencioso: a resposta é a mesma, para não revelar se a conta existe.
+      const dentro = await contarUso(ctx.banco, LIMITES.esqueciPorDocumento, digitos, ctx.agora);
       const { linhas } = await ctx.banco.executar('SELECT id, email, nome FROM usuarios WHERE documento = ?', [digitos]);
-      const u = linhas[0];
+      const u = dentro ? linhas[0] : null;
       if (u) {
         const token = gerarToken();
         await ctx.banco.executar('DELETE FROM tokens_redefinicao WHERE usuario_id = ? AND usado_em IS NULL', [u.id]);
@@ -170,6 +197,7 @@ export default [
         Promise.resolve()
           .then(() => ctx.enviarEmail({ para: u.email, assunto: 'Redefinição de senha', texto: `Use este link em até 1 hora: ${link}`, link, token }))
           .catch(e => console.error('[e-mail] falha no envio', e?.message));
+        await ctx.auditar('redefinicao_pedida', { usuarioId: u.id, alvo: digitos });
       }
       return { corpo: { ok: true, mensagem: MSG_ESQUECI } };
     },

@@ -77,7 +77,7 @@ export async function renderConta(ctx) {
 
   const s = {
     atual: campo({ rotulo: 'Senha atual', nome: 'senha-atual', tipo: 'password', autocomplete: 'current-password' }),
-    nova: campo({ rotulo: 'Nova senha', nome: 'nova-senha', tipo: 'password', autocomplete: 'new-password', dica: 'Pelo menos 8 caracteres.' }),
+    nova: campo({ rotulo: 'Nova senha', nome: 'nova-senha', tipo: 'password', autocomplete: 'new-password', dica: `Pelo menos ${['gestor', 'avaliador', 'plataforma'].includes(usuario.papel) ? 12 : 10} caracteres. Use uma frase só sua, sem seu nome, CPF ou e-mail.` }),
     conf: campo({ rotulo: 'Confirmação da nova senha', nome: 'nova-senha-confirmacao', tipo: 'password', autocomplete: 'new-password' }),
   };
   const msgSenha = el('p', { class: 'mensagem', hidden: true, role: 'status' });

@@ -86,7 +86,7 @@ export async function renderGestor(ctx) {
   const cNome = campo({ rotulo: 'Nome', nome: 'nome', autocomplete: 'off' });
   const cDoc = campo({ rotulo: 'CPF', nome: 'documento', inputmode: 'numeric', autocomplete: 'off' });
   const cEmail = campo({ rotulo: 'E-mail', nome: 'email', tipo: 'email', autocomplete: 'off' });
-  const cSenha = campo({ rotulo: 'Senha inicial', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Mínimo de 8 caracteres. A pessoa deve trocá-la no primeiro acesso.' });
+  const cSenha = campo({ rotulo: 'Senha inicial', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Mínimo de 12 caracteres, sem o nome, o CPF ou o e-mail da pessoa. Ela deve trocá-la no primeiro acesso.' });
   const mapa = { nome: cNome, documento: cDoc, email: cEmail, senha: cSenha };
   const listaAval = el('ul', { class: 'lista-simples', 'data-lista': 'avaliadores' });
   const desenharAval = lista => {

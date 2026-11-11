@@ -30,7 +30,7 @@ export async function renderPlataforma(ctx) {
     const cGNome = campo({ rotulo: 'Nome do gestor', nome: 'gestor-nome', obrigatorio: true, autocomplete: 'off' });
     const cGDoc = campo({ rotulo: 'CPF do gestor', nome: 'gestor-documento', inputmode: 'numeric', obrigatorio: true, autocomplete: 'off' });
     const cGEmail = campo({ rotulo: 'E-mail do gestor', nome: 'gestor-email', tipo: 'email', obrigatorio: true, autocomplete: 'off' });
-    const cGSenha = campo({ rotulo: 'Senha inicial do gestor', nome: 'gestor-senha', tipo: 'password', obrigatorio: true, autocomplete: 'new-password', dica: 'Mínimo de 8 caracteres.' });
+    const cGSenha = campo({ rotulo: 'Senha inicial do gestor', nome: 'gestor-senha', tipo: 'password', obrigatorio: true, autocomplete: 'new-password', dica: 'Mínimo de 12 caracteres, sem o nome, o CPF ou o e-mail do gestor.' });
     const mapa = {
       nome: cNome, slug: cSlug, 'gestor.nome': cGNome, 'gestor.documento': cGDoc, 'gestor.email': cGEmail, 'gestor.senha': cGSenha,
     };

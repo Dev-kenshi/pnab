@@ -116,7 +116,7 @@ export async function renderCriarConta(ctx) {
     documento: campo({ rotulo: 'CPF ou CNPJ', nome: 'documento', readonly: true, valor: formatarDocumento(documentoPendente) }),
     email: campo({ rotulo: 'E-mail', nome: 'email', tipo: 'email', autocomplete: 'email' }),
     telefone: campo({ rotulo: 'Telefone com DDD', nome: 'telefone', tipo: 'tel', autocomplete: 'tel', inputmode: 'tel' }),
-    senha: campo({ rotulo: 'Senha', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Pelo menos 8 caracteres.' }),
+    senha: campo({ rotulo: 'Senha', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Pelo menos 10 caracteres. Use uma frase só sua, sem seu nome, CPF ou e-mail.' }),
     confirmacao: campo({ rotulo: 'Confirmação da senha', nome: 'senha-confirmacao', tipo: 'password', autocomplete: 'new-password' }),
   };
   const organizacao = orgSelecionada ? null : campo({
@@ -214,7 +214,7 @@ export async function renderEsqueciSenha(ctx) {
 export async function renderRedefinir(ctx) {
   const { raiz, api, params } = ctx;
   const token = params.get('token') || '';
-  const senha = campo({ rotulo: 'Nova senha', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Pelo menos 8 caracteres.' });
+  const senha = campo({ rotulo: 'Nova senha', nome: 'senha', tipo: 'password', autocomplete: 'new-password', dica: 'Pelo menos 10 caracteres (12 para gestor, avaliador e plataforma). Use uma frase só sua, sem seu nome, CPF ou e-mail.' });
   const conf = campo({ rotulo: 'Confirmação da nova senha', nome: 'senha-confirmacao', tipo: 'password', autocomplete: 'new-password' });
   const msg = el('p', { class: 'mensagem', hidden: true });
   const enviar = el('button', { type: 'submit', class: 'botao botao-principal', 'data-acao': 'redefinir' }, 'Salvar nova senha');

@@ -7,8 +7,9 @@ import { fileURLToPath } from 'node:url';
 import { SQL_USUARIO } from './banco.js';
 import { registrar } from './auditoria.js';
 import {
-  COOKIE_SESSAO, ErroHttp, LIMITE_PDF, cabecalhosSeguranca, falha, hashToken, ipPadrao, lerCookies, lerCorpo, lerJson, tipoConteudo,
+  COOKIE_SESSAO, ErroHttp, LIMITE_PDF, cabecalhosSeguranca, falha, hashToken, ipPadrao, lerCookies, lerCorpo, lerJson, origemConfiavel, tipoConteudo,
 } from './seguranca.js';
+import { emailDesligado } from './email.js';
 import rotasAcesso from './rotas/acesso.js';
 import rotasConta from './rotas/conta.js';
 import rotasProponente from './rotas/proponente.js';
@@ -65,16 +66,14 @@ async function cepViaCep(cep) {
   return { cep: String(d.cep || cep).replace(/\D/g, ''), logradouro: d.logradouro || '', bairro: d.bairro || '', cidade: d.localidade || '', uf: d.uf || '' };
 }
 
-function emailNoLog({ para, assunto, texto }) {
-  console.log(`[e-mail] para ${para}: ${assunto}\n${texto}`);
-}
 
 export function criarApp({
   banco,
   anexos,
   agora = () => new Date(),
   ipDe = ipPadrao({ confiarProxy: false }),
-  enviarEmail = emailNoLog,
+  // Padrão seguro: sem configuração, nada de link ou token no log. Veja servidor/email.js.
+  enviarEmail = emailDesligado(),
   buscarCepRemoto = cepViaCep,
   https = false,
   urlPublica = '',
@@ -148,6 +147,9 @@ export function criarApp({
           return true;
         });
         if (!rota) throw falha(404, 'nao_encontrado', 'Endereço não encontrado.');
+        if (req.method !== 'GET' && req.method !== 'HEAD' && !origemConfiavel(req)) {
+          throw falha(403, 'origem_invalida', 'Pedido vindo de outro site foi recusado.');
+        }
 
         const momento = agora();
         const ip = ipDe(req);
@@ -155,7 +157,13 @@ export function criarApp({
         if (rota.papel !== 'publico') {
           if (!sessao) throw falha(401, 'sem_sessao', 'Entre para continuar.');
           const papeis = rota.papel === 'logado' ? null : [].concat(rota.papel);
-          if (papeis && !papeis.includes(sessao.usuario.papel)) throw falha(403, 'sem_permissao', 'Seu perfil não tem acesso a esta área.');
+          if (papeis && !papeis.includes(sessao.usuario.papel)) {
+            await registrar(banco, {
+              agora: momento, ip, usuarioId: sessao.usuario.id, organizacaoId: sessao.usuario.organizacao_id,
+              acao: 'acesso_negado', alvo: `${req.method} ${caminho}`.slice(0, 200),
+            });
+            throw falha(403, 'sem_permissao', 'Seu perfil não tem acesso a esta área.');
+          }
         }
 
         const ctx = {
