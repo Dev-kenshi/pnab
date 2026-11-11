@@ -303,6 +303,21 @@ test('F4: teto do edital recusado com mensagem em reais', async () => {
   }
 });
 
+test('F7: teto absurdo dá 400 com mensagem, nunca 500', async () => {
+  for (const teto of [1000000001, 1e16, 1e18, 1e20]) {
+    const r = await gestor.pedir('POST', '/api/gestor/editais', corpoEdital(amb.relogio, { numero: `F7-${String(teto)}`, teto }));
+    assert.equal(r.status, 400, String(teto));
+    const campo = r.corpo.campos.find(c => c.campo === 'teto');
+    assert.equal(campo.mensagem, 'Teto acima do máximo de R$ 10.000.000,00.');
+  }
+  const ok = await gestor.pedir('POST', '/api/gestor/editais', corpoEdital(amb.relogio, { numero: 'F7-LIMITE', teto: 1000000000 }));
+  assert.equal(ok.status, 201);
+  assert.equal(ok.corpo.edital.teto, 1000000000);
+  const ed = ok.corpo.edital.slug;
+  const alto = await gestor.pedir('PUT', `/api/gestor/editais/${ed}`, corpoEdital(amb.relogio, { numero: 'F7-LIMITE', teto: 1e16 }));
+  assert.equal(alto.status, 400);
+});
+
 // Fica por último: encerra o edital usado pelos testes acima.
 test('edital encerrado não aceita inscrição nem envio', async () => {
   const id = await rascunho();

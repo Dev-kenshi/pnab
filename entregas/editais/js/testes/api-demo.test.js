@@ -296,6 +296,21 @@ test('gestor: edital sem critério não abre e validação de campos', async () 
   assert.equal(igual.edital.slug, 'ex-9-2');
 });
 
+test('F7: demonstração recusa teto acima de R$ 10.000.000,00', async () => {
+  const { api } = montar();
+  await entrarComo(api, GESTOR);
+  const base = { numero: 'F7', titulo: 'Teto alto', inicio: '2026-01-01', fim: '2026-02-01' };
+  for (const teto of [1000000001, 1e16, 1e20]) {
+    const e = await erroDe(api.criarEdital({ ...base, teto }));
+    assert.equal(e.status, 400, String(teto));
+    assert.equal(e.campos.find(c => c.campo === 'teto').mensagem, 'Teto acima do máximo de R$ 10.000.000,00.');
+  }
+  const { edital } = await api.criarEdital({ ...base, teto: 1000000000 });
+  assert.equal(edital.teto, 1000000000);
+  const alto = await erroDe(api.salvarEdital(edital.slug, { ...base, teto: 1e16 }));
+  assert.equal(alto.status, 400);
+});
+
 test('C11 avaliador lança 8, 7 e 0 e a nota geral é 15,0', async () => {
   const { api } = montar();
   await entrarComo(api, AVALIADORA);
