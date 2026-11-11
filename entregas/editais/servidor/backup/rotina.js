@@ -17,6 +17,7 @@ const NOME_ANEXO_RE = /^anexos\/([a-f0-9]{32})\.bin\.teb$/;
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 const TRAVA_VALIDADE_MS = 6 * 60 * 60 * 1000;
+const TRAVA_FOLGA_FUTURO_MS = 60 * 1000;
 
 // Data de um nome banco/AAAA-MM-DDTHH-MM-SS-mmmZ...
 function dataDoNome(nome) {
@@ -35,8 +36,9 @@ async function travar(pastaTemp, agora) {
     if (e.code !== 'EEXIST') throw e;
     const { mtimeMs } = await stat(trava);
     const idade = Date.now() - mtimeMs;
-    // Trava com data no futuro (relógio mexido) também é descartada.
-    if (idade >= 0 && idade < TRAVA_VALIDADE_MS) {
+    // Trava com data no futuro (relógio mexido) também é descartada. A folga de 1 minuto
+    // cobre a diferença entre o relógio do disco e o do Node, que no Windows passa de 0.
+    if (idade > -TRAVA_FOLGA_FUTURO_MS && idade < TRAVA_VALIDADE_MS) {
       throw new Error(`Outro backup ou restauração está em andamento. Tente de novo mais tarde. Se nenhum estiver rodando, apague ${trava}.`);
     }
     await writeFile(trava, String(agora.toISOString()), { mode: 0o600 });
@@ -122,8 +124,8 @@ export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter =
       }
     }
   } finally {
-    await rm(tmp, { recursive: true, force: true });
-    await destravar();
+    try { await rm(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    finally { await destravar(); }
   }
   relatorio.ok = relatorio.destinos.every(d => d.ok);
   return relatorio;
@@ -177,7 +179,7 @@ export async function restaurar({ destino, chave, abrirDestinoBanco, pastaAnexos
     }
     return { backup: escolhido, criadoEm: resultado.criadoEm, contagem: resultado.contagem, anexos, anexosPulados };
   } finally {
-    await rm(tmp, { recursive: true, force: true });
-    await destravar();
+    try { await rm(tmp, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 }); }
+    finally { await destravar(); }
   }
 }
