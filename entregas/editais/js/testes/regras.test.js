@@ -215,7 +215,7 @@ test('período, abertura, prazo de recurso e abas', () => {
 test('protocolo, senha e arquivo PDF', () => {
   assert.equal(r.gerarProtocolo(2026, 105), 'TEB-2026-000105');
   assert.match(r.gerarProtocolo(2026, 1), /^TEB-\d{4}-\d{6}$/);
-  assert.equal(r.validarSenha('curta'), 'A senha precisa ter ao menos 8 caracteres.');
+  assert.equal(r.validarSenha('curta'), 'A senha precisa ter ao menos 10 caracteres.');
   assert.equal(r.validarSenha('suficiente'), null);
   assert.equal(r.validarArquivoPdf({ nome: 'a.pdf', tipo: 'application/pdf', tamanho: 100 }), null);
   assert.ok(r.validarArquivoPdf({ nome: 'a.png', tipo: 'image/png', tamanho: 100 }));

@@ -53,7 +53,7 @@ async function criarPlataforma() {
   if (DOCUMENTOS_RESERVADOS.has(documento)) sair('Esse documento é reservado para o modo demonstração.');
   if (!nome || !email) sair('Preencha TEB_PLATAFORMA_NOME e TEB_PLATAFORMA_EMAIL.');
   if (senha === SENHA_PROIBIDA) sair('Essa senha é de demonstração. Escolha outra.');
-  const msg = regras.validarSenha(senha);
+  const msg = regras.validarSenha(senha, { papel: 'plataforma', documento, nome, email });
   if (msg) sair(msg);
   const banco = await abrir();
   const agora = new Date();

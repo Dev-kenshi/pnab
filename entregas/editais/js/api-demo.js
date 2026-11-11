@@ -139,15 +139,15 @@ function exigirDocumento(valor) {
   return v.digitos;
 }
 
-function conferirSenhaNova(senha, confirmacao, campo = 'senha', campoConfirmacao = 'senhaConfirmacao') {
+function conferirSenhaNova(senha, confirmacao, campo = 'senha', campoConfirmacao = 'senhaConfirmacao', contexto = {}) {
   const campos = [];
-  const msg = regras.validarSenha(senha);
+  const msg = regras.validarSenha(senha, contexto);
   if (msg) campos.push({ campo, mensagem: msg });
   if (confirmacao !== undefined && senha !== confirmacao) campos.push({ campo: campoConfirmacao, mensagem: 'A confirmação não confere com a senha.' });
   return campos;
 }
 
-function validarDadosConta(corpo, { exigirConfirmacao = false, documentoComoCampo = false } = {}) {
+function validarDadosConta(corpo, { exigirConfirmacao = false, documentoComoCampo = false, papel = 'proponente' } = {}) {
   const digitos = regras.somenteDigitos(corpo.documento);
   const campos = [];
   if (documentoComoCampo) {
@@ -155,9 +155,9 @@ function validarDadosConta(corpo, { exigirConfirmacao = false, documentoComoCamp
   } else {
     exigirDocumento(digitos);
   }
-  campos.push(...conferirSenhaNova(corpo.senha, exigirConfirmacao ? corpo.senhaConfirmacao : undefined));
   const nome = texto(corpo.nome, 120);
   const email = texto(corpo.email, 160).toLowerCase();
+  campos.push(...conferirSenhaNova(corpo.senha, exigirConfirmacao ? corpo.senhaConfirmacao : undefined, 'senha', 'senhaConfirmacao', { papel, documento: digitos, nome, email }));
   if (!nome) campos.push({ campo: 'nome', mensagem: 'Campo obrigatório: Nome' });
   if (!EMAIL_RE.test(email)) campos.push({ campo: 'email', mensagem: 'Informe um e-mail válido.' });
   return { digitos, nome, email, campos };
@@ -494,12 +494,12 @@ const rotasAcesso = [
       const token = typeof c.token === 'string' ? c.token : '';
       const invalido = () => falha(400, 'token_invalido', 'Link inválido ou vencido. Peça um novo.');
       if (!token || token.length > 200) throw invalido();
-      const campos = conferirSenhaNova(c.senha, c.senhaConfirmacao);
       const h = await hashSenha(token, 'redefinicao');
       const t = db.tokens.find(x => x.hash === h && !x.usadoEm && new Date(x.expiraEm).getTime() > agora.getTime());
       if (!t) throw invalido();
-      if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       const u = db.usuarios.find(x => x.id === t.usuarioId);
+      const campos = conferirSenhaNova(c.senha, c.senhaConfirmacao, 'senha', 'senhaConfirmacao', u);
+      if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       t.usadoEm = agora.toISOString();
       u.sal = gerarSal();
       u.senhaHash = await hashSenha(c.senha, u.sal);
@@ -541,7 +541,7 @@ const rotasConta = [
       const c = ctx.corpo;
       const atual = typeof c.senhaAtual === 'string' ? c.senhaAtual : '';
       if ((await hashSenha(atual, ctx.usuario.sal)) !== ctx.usuario.senhaHash) throw falha(400, 'senha_atual_incorreta', 'A senha atual não confere.');
-      const campos = conferirSenhaNova(c.novaSenha, c.novaSenhaConfirmacao, 'novaSenha', 'novaSenhaConfirmacao');
+      const campos = conferirSenhaNova(c.novaSenha, c.novaSenhaConfirmacao, 'novaSenha', 'novaSenhaConfirmacao', ctx.usuario);
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       ctx.usuario.sal = gerarSal();
       ctx.usuario.senhaHash = await hashSenha(c.novaSenha, ctx.usuario.sal);
@@ -832,7 +832,7 @@ const rotasGestor = [
     metodo: 'POST', caminho: '/api/gestor/avaliadores', papel: 'gestor',
     fn: async ctx => {
       const { db } = ctx;
-      const { digitos, nome, email, campos } = validarDadosConta(ctx.corpo, { documentoComoCampo: true });
+      const { digitos, nome, email, campos } = validarDadosConta(ctx.corpo, { documentoComoCampo: true, papel: 'avaliador' });
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       if (db.usuarios.some(u => u.documento === digitos)) throw falha(409, 'documento_existente', 'Já existe uma conta com esse documento.');
       const sal = gerarSal();
@@ -1004,7 +1004,7 @@ const rotasPlataforma = [
       const g = c.gestor && typeof c.gestor === 'object' ? c.gestor : {};
       const nome = texto(c.nome, 160);
       const slug = texto(c.slug, 80);
-      const dados = validarDadosConta(g, { documentoComoCampo: true });
+      const dados = validarDadosConta(g, { documentoComoCampo: true, papel: 'gestor' });
       const campos = dados.campos.map(x => ({ ...x, campo: `gestor.${x.campo}` }));
       if (!nome) campos.push({ campo: 'nome', mensagem: 'Campo obrigatório: Nome da organização' });
       if (!SLUG_RE.test(slug)) campos.push({ campo: 'slug', mensagem: 'Use só letras minúsculas, números e hífen.' });

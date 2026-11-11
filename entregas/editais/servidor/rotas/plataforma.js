@@ -31,7 +31,7 @@ export default [
       const g = c.gestor && typeof c.gestor === 'object' ? c.gestor : {};
       const nome = texto(c.nome, 160);
       const slug = texto(c.slug, 80);
-      const dados = validarDadosConta(g, { documentoComoCampo: true });
+      const dados = validarDadosConta(g, { documentoComoCampo: true, papel: 'gestor' });
       const campos = dados.campos.map(x => ({ ...x, campo: `gestor.${x.campo}` }));
       if (!nome) campos.push({ campo: 'nome', mensagem: 'Campo obrigatório: Nome da organização' });
       if (!SLUG_RE.test(slug)) campos.push({ campo: 'slug', mensagem: 'Use só letras minúsculas, números e hífen.' });

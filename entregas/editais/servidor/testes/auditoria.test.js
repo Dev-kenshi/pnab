@@ -11,7 +11,7 @@ after(async () => { await amb?.fechar(); });
 const SENHA_NOVA = 'Senha-Unica-Auditoria-77';
 const SENHA_ERRADA = 'Errada-Unica-Auditoria-55';
 const SENHA_REDEFINIDA = 'Redefinida-Unica-Auditoria-33';
-const SENHA_AVALIADOR = 'Avaliador-Unico-Auditoria-11';
+const SENHA_AVALIADOR = 'Banca-Unica-Auditoria-11';
 
 async function contar(acao) {
   const { linhas } = await amb.banco.executar('SELECT COUNT(*) AS n FROM auditoria WHERE acao = ?', [acao]);
