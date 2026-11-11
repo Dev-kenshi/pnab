@@ -1,0 +1,218 @@
+[
+  {
+    "id": "C1",
+    "descricao": "Login em 2 etapas com documento e senha corretos abre o painel do proponente",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" }
+    ],
+    "espera": { "seletor": "[data-painel='proponente']", "contem": "Pessoa Física" }
+  },
+  {
+    "id": "C2",
+    "descricao": "Senha errada mostra erro e não entra",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "SenhaErrada#1"] },
+      { "clicar": "[data-acao='entrar']" }
+    ],
+    "espera": { "seletor": "[data-erro='senha']", "contem": "Senha incorreta" }
+  },
+  {
+    "id": "C3",
+    "descricao": "CPF com dígito verificador inválido é recusado na etapa 1",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "11111111111"] },
+      { "clicar": "[data-acao='avancar']" }
+    ],
+    "espera": { "seletor": "[data-erro='documento']", "contem": "inválido" }
+  },
+  {
+    "id": "C4",
+    "descricao": "Documento válido e desconhecido leva a criar conta, e a conta nova entra no painel",
+    "rota": "#/login?org=fundacao-exemplo",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "93541134780"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-tela='criar-conta']" },
+      { "preencher": ["[data-campo='natureza']", "MEI"] },
+      { "preencher": ["[data-campo='nome']", "Ana Exemplo"] },
+      { "preencher": ["[data-campo='email']", "ana@teb.example"] },
+      { "preencher": ["[data-campo='telefone']", "71900000000"] },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "preencher": ["[data-campo='senha-confirmacao']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='criar-conta']" }
+    ],
+    "espera": { "seletor": "[data-painel='proponente']", "contem": "Ana Exemplo" }
+  },
+  {
+    "id": "C5",
+    "descricao": "Painel mostra o aviso em janela, ele fecha, e os 4 contadores aparecem",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" }
+    ],
+    "espera": { "seletor": "[data-contador]", "contagem": 4, "contem": "Não aprovados" }
+  },
+  {
+    "id": "C6",
+    "descricao": "Inscrição selecionada mostra a linha do tempo de 7 etapas",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" }
+    ],
+    "espera": { "seletor": "[data-inscricao='TEB-2026-000101'] [data-etapa-tempo]", "contagem": 7, "contem": "Execução" }
+  },
+  {
+    "id": "C7",
+    "descricao": "Enviar inscrição com campo obrigatório vazio é bloqueado com mensagem clara",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" },
+      { "clicar": "[data-acao='inscrever'][data-edital='ed-exemplo-001']" },
+      { "esperar": "[data-form='inscricao']" },
+      { "clicar": "[data-acao='enviar-inscricao']" }
+    ],
+    "espera": { "seletor": "[data-erro='obrigatorio']", "contagem_minima": 1, "contem": "obrigatório" }
+  },
+  {
+    "id": "C8",
+    "descricao": "Inscrição completa é enviada e gera protocolo",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" },
+      { "clicar": "[data-acao='inscrever'][data-edital='ed-exemplo-001']" },
+      { "esperar": "[data-form='inscricao']" },
+      { "preencher": ["[data-campo='titulo']", "Oficina Exemplo de Teatro"] },
+      { "preencher": ["[data-campo='categoria']", "Teatro"] },
+      { "preencher": ["[data-campo='cota']", "Ampla concorrência"] },
+      { "preencher": ["[data-campo='extra-resumo']", "Resumo de exemplo fictício do projeto."] },
+      { "clicar": "[data-acao='add-meta']" },
+      { "preencher": ["[data-campo='meta-etapa']", "Ensaios"] },
+      { "preencher": ["[data-campo='meta-acao']", "Realizar 10 ensaios abertos"] },
+      { "clicar": "[data-campo='aceite']" },
+      { "clicar": "[data-acao='enviar-inscricao']" }
+    ],
+    "espera": { "seletor": "[data-protocolo]", "contem": "TEB-" }
+  },
+  {
+    "id": "C9",
+    "descricao": "Planilha orçamentária soma os itens e alerta ao passar do teto do edital",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" },
+      { "clicar": "[data-acao='inscrever'][data-edital='ed-exemplo-001']" },
+      { "esperar": "[data-form='inscricao']" },
+      { "clicar": "[data-acao='add-orcamento']" },
+      { "preencher": ["[data-campo='orc-descricao']", "Cenário"] },
+      { "preencher": ["[data-campo='orc-qtd']", "10"] },
+      { "preencher": ["[data-campo='orc-valor']", "1500"] }
+    ],
+    "espera": { "seletor": "[data-orcamento-alerta]", "contem": "15.000,00" }
+  },
+  {
+    "id": "C10",
+    "descricao": "Gestor cria edital, abre as inscrições e ele aparece como aberto",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "11144477735"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-painel='gestor']" },
+      { "clicar": "[data-acao='novo-edital']" },
+      { "esperar": "[data-form='edital']" },
+      { "preencher": ["[data-campo='numero']", "EX-002/2026"] },
+      { "preencher": ["[data-campo='titulo']", "Edital Exemplo Oficinas"] },
+      { "preencher": ["[data-campo='descricao']", "Edital de exemplo fictício."] },
+      { "preencher": ["[data-campo='inicio']", "2026-01-01"] },
+      { "preencher": ["[data-campo='fim']", "2027-12-31"] },
+      { "preencher": ["[data-campo='teto']", "5000"] },
+      { "clicar": "[data-acao='salvar-edital']" },
+      { "esperar": "[data-lista='editais']" },
+      { "clicar": "[data-acao='abrir-edital']" }
+    ],
+    "espera": { "seletor": "[data-edital-linha][data-situacao='aberto']", "contagem": 2, "contem": "Edital Exemplo Oficinas" }
+  },
+  {
+    "id": "C11",
+    "descricao": "Avaliador lança notas por critério (bônus com zero) e envia a avaliação",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "39053344705"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-painel='avaliador']" },
+      { "clicar": "[data-acao='avaliar'][data-inscricao='TEB-2026-000103']" },
+      { "esperar": "[data-form='avaliacao']" },
+      { "preencher": ["[data-nota='qualidade']", "8"] },
+      { "preencher": ["[data-nota='viabilidade']", "7"] },
+      { "preencher": ["[data-nota='bonus-regional']", "0"] },
+      { "preencher": ["[data-campo='parecer']", "Parecer de exemplo fictício."] },
+      { "clicar": "[data-acao='enviar-avaliacao']" }
+    ],
+    "espera": { "seletor": "[data-avaliacao-enviada]", "contem": "15,0" }
+  },
+  {
+    "id": "C12",
+    "descricao": "Proponente abre recurso de nota dentro do prazo e o recurso fica em análise",
+    "rota": "#/login",
+    "passos": [
+      { "preencher": ["[data-campo='documento']", "52998224725"] },
+      { "clicar": "[data-acao='avancar']" },
+      { "esperar": "[data-etapa='senha']" },
+      { "preencher": ["[data-campo='senha']", "Exemplo#2026"] },
+      { "clicar": "[data-acao='entrar']" },
+      { "esperar": "[data-aviso]" },
+      { "clicar": "[data-aviso-fechar]" },
+      { "clicar": "[data-acao='visualizar'][data-inscricao='TEB-2026-000102']" },
+      { "esperar": "[data-aba-painel='ficha']" },
+      { "clicar": "[data-aba='recursos']" },
+      { "esperar": "[data-form='recurso']" },
+      { "preencher": ["[data-campo='justificativa']", "Justificativa de exemplo fictício para o recurso."] },
+      { "clicar": "[data-acao='enviar-recurso']" }
+    ],
+    "espera": { "seletor": "[data-recurso-situacao]", "contem": "Em análise" }
+  }
+]
