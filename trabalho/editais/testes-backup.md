@@ -1,4 +1,4 @@
-REPROVADO
+REPROVADO (rodada 2: TEB_GITHUB_INTERVALO_DIAS em branco vira 0 e envia o banco ao GitHub todo dia)
 
 # Teste da etapa de backups (commits 1a2399f a a713933)
 
@@ -79,3 +79,52 @@ Script: `node trabalho/editais/r4-backup-ataque.mjs` (nuvem falsa, sem rede). 31
 ## Limpeza
 - Criados: `trabalho/editais/r4-backup-ataque.mjs` (ignorado pelo git) e este arquivo. A pasta `tmp-r4/cli` foi apagada.
 - Nada na entrega foi editado. Sem commit nem push.
+
+# Rodada 2
+
+Veredito: REPROVADO (rodada 2). Uma falha baixa, correção de uma linha. As falhas 1 a 6 e o risco do Drive estão corrigidos.
+
+## Portões
+- `cd entregas/editais && npm test`: 127 de 127 passam.
+- `node scripts/portoes/portao-3.mjs entregas/editais`: APROVADO.
+- `backup.test.js` tem 23 testes, como diz o doc.
+
+## Falhas antigas, conferidas de novo
+Script: `node trabalho/editais/r4-backup-ataque.mjs`. Resultado: 33 de 33 ok.
+- Falha 1 corrigida. Escrita concorrente gera backup que restaura. Exportação dentro de uma transação.
+- Falha 2 corrigida no código. Script `node trabalho/editais/r4-rodada2.mjs`: dia 1 enviado, dia 2 pulado, dia 8 enviado. O GitHub fica com 2 arquivos. Doc explica o histórico do Git. Ver falha nova abaixo.
+- Falha 3 corrigida. Com relógio atrasado sobra o backup novo (`banco/2026-07-05...`).
+- Falha 4 corrigida. Erro traz `Anexo 5ac5...: Backup adulterado... 0 anexos já tinham sido restaurados.` No CLI o banco restaurado é apagado. Teste com `env -i`: com `TEB_RESTAURAR_BANCO` já existente, recusa e o arquivo fica intacto. Com banco novo e rede falsa, nada sobra.
+- Falha 5 corrigida (leitura de `destinos.js`, regex recusa `.` e `..`).
+- Falha 6 corrigida (arquivo vazio sem gzip vai e volta).
+- Drive: listagem sem `name contains` (comentário em `destinos.js` linha 46). Não testado contra o Drive real.
+
+## Regressões procuradas (r4-rodada2.mjs)
+- Trava fresca bloqueia backup e restauração. Esperado.
+- Trava com mais de 6 h é descartada e o backup roda.
+- Falha de destino, falha na exportação: trava e pasta temporária ficam limpas.
+- Sobras `bkp-*` e `rest-*` são apagadas. Outro arquivo na pasta fica.
+- Dois backups ao mesmo tempo: um roda, o outro recusa. Pasta vazia depois.
+- Turso: usei um fetch falso com baton sobre SQLite. Exportação, importação do NDJSON e `fazerBackup` funcionam. Só `BEGIN IMMEDIATE` e `COMMIT`, nenhum baton aberto sobrando. Não testei contra o Turso real.
+- Conferência: o SQLite temporário some, a pasta temporária fica vazia.
+- Exportar 40000 linhas levou 281 ms. A fila do banco segura as outras consultas nesse tempo (o doc já avisa).
+- CLI `restaurar` só apaga o banco que ela criou (a checagem de existência vem antes).
+
+## Falha
+
+### 1. Baixa. `TEB_GITHUB_INTERVALO_DIAS` em branco vira 0 e o GitHub recebe o banco todo dia
+- O que fez: `destinosDoAmbiente({ ...TODAS, TEB_GITHUB_INTERVALO_DIAS: '' })`.
+- Esperava: padrão 7, como diz o doc ("padrão 7") e o `.env.example`.
+- Aconteceu: `intervaloDias` = 0. A condição `d.intervaloDias ?` é falsa e o banco vai a cada execução. Volta o problema do histórico do Git (falha 2 da rodada 1) sem aviso. Em painéis de segredos, variável em branco é comum.
+- Valores `abc`, `-1`, `1.5` são recusados com mensagem clara. Só o vazio escapa.
+- Arquivo provável: `servidor/backup/destinos.js` linha 238 (`Number(env.TEB_GITHUB_INTERVALO_DIAS ?? 7)`). Tratar string vazia como ausente. Se 0 for válido, dizer no doc e no `.env.example` que 0 envia sempre.
+
+## Melhorias opcionais (não reprovam)
+- A mensagem da trava não diz o caminho do arquivo `backup.trava`. Depois de um SIGKILL, backup e restauração ficam bloqueados por até 6 h. Quem restaura na mesma máquina, em desastre, não sabe o que apagar. Citar o caminho e a idade da trava.
+- Trava com data de modificação no futuro (relógio errado) bloqueia sem limite. Simulei com `utimesSync` 30 dias à frente. Tratar idade negativa como velha.
+- A trava não é renovada. Backup acima de 6 h (banco enorme, Drive lento) pode perder a trava para um segundo processo.
+- CLI `restaurar` com falha antes de criar o banco (rede fora) diz "banco restaurado pela metade foi apagado", sem ter criado nada. Só mensagem.
+- Restante da lista da rodada 1 continua: B2 sem novo `b2_get_upload_url` em 401 ou 5xx, `fetch failed` sem causa, sem teste da CLI nem da paginação.
+
+## Limpeza
+- Criado: `trabalho/editais/r4-rodada2.mjs` (ignorado pelo git). Pasta `r4-cli-*` apagada. Nada na entrega foi editado. Sem commit nem push.

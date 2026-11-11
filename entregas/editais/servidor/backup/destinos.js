@@ -235,7 +235,7 @@ export function destinosDoAmbiente(env, { fetch } = {}) {
   if (exigirVariaveis(env, ['TEB_GITHUB_TOKEN', 'TEB_GITHUB_REPO'], 'GitHub')) {
     lista.push(githubPrivado({
       token: env.TEB_GITHUB_TOKEN, repo: env.TEB_GITHUB_REPO, ramo: env.TEB_GITHUB_RAMO || 'main',
-      intervaloDias: Number(env.TEB_GITHUB_INTERVALO_DIAS ?? 7), fetch,
+      intervaloDias: String(env.TEB_GITHUB_INTERVALO_DIAS ?? '').trim() === '' ? 7 : Number(env.TEB_GITHUB_INTERVALO_DIAS), fetch,
     }));
   }
   return lista;

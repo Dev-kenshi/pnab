@@ -34,7 +34,11 @@ async function travar(pastaTemp, agora) {
   } catch (e) {
     if (e.code !== 'EEXIST') throw e;
     const { mtimeMs } = await stat(trava);
-    if (Date.now() - mtimeMs < TRAVA_VALIDADE_MS) throw new Error('Outro backup ou restauração está em andamento. Tente de novo mais tarde.');
+    const idade = Date.now() - mtimeMs;
+    // Trava com data no futuro (relógio mexido) também é descartada.
+    if (idade >= 0 && idade < TRAVA_VALIDADE_MS) {
+      throw new Error(`Outro backup ou restauração está em andamento. Tente de novo mais tarde. Se nenhum estiver rodando, apague ${trava}.`);
+    }
     await writeFile(trava, String(agora.toISOString()), { mode: 0o600 });
   }
   for (const n of await readdir(pastaTemp)) {

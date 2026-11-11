@@ -307,6 +307,7 @@ test('correção 2: GitHub recebe o banco a cada 7 dias por padrão', async () =
   assert.deepEqual([...nuvem.github.keys()].sort(), ['banco/2026-09-01T03-00-00-000Z.ndjson.gz.teb', 'banco/2026-09-08T03-00-00-000Z.ndjson.gz.teb']);
   assert.equal([...nuvem.b2.keys()].filter(k => k.startsWith('banco/')).length, 4);
   assert.throws(() => destinosDoAmbiente({ ...CRED.github, TEB_GITHUB_INTERVALO_DIAS: '-1' }), /INTERVALO/);
+  for (const vazio of ['', '  ', undefined]) assert.equal(destinosDoAmbiente({ ...CRED.github, TEB_GITHUB_INTERVALO_DIAS: vazio })[0].intervaloDias, 7);
 });
 
 test('correção 3: relógio atrasado não apaga o backup recém-enviado', async () => {
@@ -348,5 +349,9 @@ test('trava: duas execuções juntas não rodam e sobras de execução morta sã
   await backup(nuvem, { pastaTemp: tmp });
   assert.ok(!existsSync(join(tmp, 'bkp-morto')));
   await writeFile(join(tmp, 'backup.trava'), 'outro');
-  await assert.rejects(backup(nuvem, { pastaTemp: tmp }), /em andamento/);
+  await assert.rejects(backup(nuvem, { pastaTemp: tmp }), /em andamento.*backup\.trava/);
+  const { utimes } = await import('node:fs/promises');
+  const futuro = new Date(Date.now() + 365 * 24 * 3600 * 1000);
+  await utimes(join(tmp, 'backup.trava'), futuro, futuro);
+  assert.equal((await backup(nuvem, { pastaTemp: tmp })).ok, true);
 });
