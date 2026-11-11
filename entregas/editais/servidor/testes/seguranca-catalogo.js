@@ -6,7 +6,7 @@ import { randomBytes, scryptSync } from 'node:crypto';
 import { readFile, readdir, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { gerarCPF, pdfMinimo, SENHA } from './ajuda.js';
-import { hashToken, verificarSenha } from '../seguranca.js';
+import { hashToken, ipPadrao, verificarSenha } from '../seguranca.js';
 import { lerChave } from '../anexos.js';
 import { cifrarArquivo, decifrarArquivo, lerChaveBackup } from '../backup/cifra.js';
 import { exportarBanco } from '../backup/exportar.js';
@@ -59,21 +59,40 @@ export const CATALOGO = [
     const { linhas } = await c.amb.banco.executar('SELECT * FROM usuarios');
     assert.ok(!JSON.stringify(linhas).includes(SENHA));
   } },
-  { id: 'SEG-004', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Senha errada e documento sem conta dão a mesma resposta', fn: async c => {
-    const a = await c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento: c.amb.contas.b.gestor.documento, senha: 'Errada-mas-longa-1' });
-    const b = await c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento: novoCPF(), senha: 'Errada-mas-longa-1' });
-    assert.equal(a.status, 401);
-    assert.deepEqual(a.corpo, b.corpo);
+  { id: 'SEG-004', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Senha errada e documento sem conta dão a mesma resposta e o mesmo tempo', fn: async c => {
+    const { documento } = await novaConta(c);
+    const medir = async doc => {
+      const t = performance.now();
+      const r = await c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento: doc, senha: 'Errada-mas-longa-1' });
+      return { r, ms: performance.now() - t };
+    };
+    const comConta = [], semConta = [];
+    for (let i = 0; i < 3; i++) { comConta.push(await medir(documento)); semConta.push(await medir(novoCPF())); }
+    assert.equal(comConta[0].r.status, 401);
+    assert.deepEqual(comConta[0].r.corpo, semConta[0].r.corpo);
+    // Sem conta, o servidor também calcula um scrypt: o tempo não denuncia quem tem cadastro.
+    const menor = l => Math.min(...l.map(x => x.ms));
+    assert.ok(menor(semConta) >= menor(comConta) * 0.5, `sem conta ${menor(semConta)} ms, com conta ${menor(comConta)} ms`);
   } },
   { id: 'SEG-005', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Cinco erros no mesmo documento bloqueiam o login por 15 minutos', fn: async c => {
     const { documento } = await novaConta(c);
     for (let i = 0; i < 5; i++) assert.equal((await c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento, senha: 'Errada-mas-longa-1' })).status, 401);
     assert.equal((await c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento, senha: SENHA_FORTE })).status, 429);
+    // Em paralelo: 30 tentativas ao mesmo tempo, com a senha certa no fim, não passam do limite.
+    const outra = (await novaConta(c)).documento;
+    const tentativas = Array.from({ length: 30 }, (_, i) => c.amb.cliente().pedir('POST', '/api/acesso/entrar', { documento: outra, senha: i === 29 ? SENHA_FORTE : `Errada-mas-longa-${i}` }));
+    const status = (await Promise.all(tentativas)).map(r => r.status);
+    assert.equal(status.filter(x => x === 401).length, 5, status.join(','));
+    assert.equal(status.filter(x => x === 200).length, 0, status.join(','));
   } },
   { id: 'SEG-006', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Cinco erros do mesmo IP em documentos diferentes bloqueiam o IP', fn: async c => {
     const cli = c.amb.cliente();
     for (let i = 0; i < 5; i++) await cli.pedir('POST', '/api/acesso/entrar', { documento: novoCPF(), senha: 'Errada-mas-longa-1' });
     assert.equal((await cli.pedir('POST', '/api/acesso/entrar', { documento: c.amb.contas.a.proponente.documento, senha: SENHA })).status, 429);
+    // Atrás de proxy, o IP é o último item de X-Forwarded-For; os anteriores podem ser forjados.
+    const ip = ipPadrao({ confiarProxy: true });
+    assert.equal(ip({ headers: { 'x-forwarded-for': '6.6.6.6, 203.0.113.9' }, socket: {} }), '203.0.113.9');
+    assert.equal(ipPadrao({ confiarProxy: false })({ headers: { 'x-forwarded-for': '6.6.6.6' }, socket: { remoteAddress: '10.0.0.5' } }), '10.0.0.5');
   } },
   { id: 'SEG-007', manual: MANUAL.IAM, csf: 'PR.AA-01', titulo: 'Hash malformado nunca confere e não lança erro', fn: async () => {
     for (const h of ['', 'texto', 'scrypt$x$y$z$a$b', 'bcrypt$1$2$3$4$5', null]) assert.equal(await verificarSenha('qualquer', h), false);
@@ -174,6 +193,10 @@ export const CATALOGO = [
     const pedido = senhaAtual => cli.pedir('PUT', '/api/conta/senha', { senhaAtual, novaSenha: 'Outra-frase-bem-longa-9', novaSenhaConfirmacao: 'Outra-frase-bem-longa-9' });
     for (let i = 0; i < 5; i++) assert.equal((await pedido('Errada-mas-longa-1')).status, 400);
     assert.equal((await pedido(SENHA_FORTE)).status, 429);
+    // Em paralelo também: 20 senhas atuais erradas ao mesmo tempo, só 5 são avaliadas.
+    const { cli: outro } = await novaConta(c);
+    const status = (await Promise.all(Array.from({ length: 20 }, (_, i) => outro.pedir('PUT', '/api/conta/senha', { senhaAtual: `Errada-mas-longa-${i}`, novaSenha: 'Outra-frase-bem-longa-9', novaSenhaConfirmacao: 'Outra-frase-bem-longa-9' })))).map(r => r.status);
+    assert.equal(status.filter(x => x === 400).length, 5, status.join(','));
   } },
   { id: 'SEG-028', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Esqueci a senha responde igual para documento com e sem conta', fn: async c => {
     const a = await c.amb.cliente().pedir('POST', '/api/acesso/esqueci-senha', { documento: c.amb.contas.b.gestor.documento });
@@ -221,6 +244,9 @@ export const CATALOGO = [
     const cli = c.amb.cliente();
     for (let i = 0; i < 30; i++) assert.equal((await cli.pedir('POST', '/api/acesso/documento', { documento: novoCPF() })).status, 200);
     assert.equal((await cli.pedir('POST', '/api/acesso/documento', { documento: novoCPF() })).status, 429);
+    // A criação de conta também revela se o documento existe: entra no mesmo limite.
+    const r = await cli.pedir('POST', '/api/acesso/criar-conta', { organizacao: 'org-a', natureza: 'Pessoa Física', nome: 'X Teste', documento: c.amb.contas.a.gestor.documento, email: 'x@teste.example', telefone: '71900000000', senha: SENHA_FORTE, senhaConfirmacao: SENHA_FORTE });
+    assert.equal(r.status, 429);
   } },
   { id: 'SEG-035', manual: MANUAL.IAM, csf: 'PR.AA-03', titulo: 'Cookie com token gigante é ignorado', fn: async c => {
     assert.equal((await c.amb.cliente().pedir('GET', '/api/conta', undefined, { cabecalhos: { cookie: `teb_sessao=${'a'.repeat(300)}` } })).status, 401);
@@ -243,7 +269,12 @@ export const CATALOGO = [
     assert.ok(!JSON.stringify((await c.avA.pedir('GET', '/api/avaliador/inscricoes')).corpo).includes(c.inscA.protocolo));
     naoOk(await c.avA.pedir('GET', `/api/avaliador/inscricoes/${c.inscA.protocolo}`), 'avaliador sem atribuição');
   } },
-  { id: 'SEG-042', manual: MANUAL.IAM, csf: 'PR.AA-05', titulo: 'Proponente não vê inscrição de outro proponente', fn: async c => naoOk(await c.pB.pedir('GET', `/api/inscricoes/${c.inscA.protocolo}`), 'proponente B') },
+  { id: 'SEG-042', manual: MANUAL.IAM, csf: 'PR.AA-05', titulo: 'Proponente não vê inscrição de outro proponente, nem da mesma organização', fn: async c => {
+    naoOk(await c.pB.pedir('GET', `/api/inscricoes/${c.inscA.protocolo}`), 'proponente de outra organização');
+    const { cli } = await novaConta(c);
+    naoOk(await cli.pedir('GET', `/api/inscricoes/${c.inscA.protocolo}`), 'proponente da mesma organização');
+    naoOk(await cli.pedir('PUT', `/api/inscricoes/${c.rascunhoA}`, { ficha: { titulo: 'Invadido' } }), 'alterar rascunho alheio');
+  } },
   { id: 'SEG-043', manual: MANUAL.IAM, csf: 'PR.AA-05', titulo: 'Gestor de outra organização não vê a inscrição', fn: async c => {
     assert.ok(!JSON.stringify((await c.gB.pedir('GET', '/api/gestor/inscricoes')).corpo).includes(c.inscA.protocolo));
     naoOk(await c.gB.pedir('PUT', `/api/gestor/inscricoes/${c.inscA.protocolo}/resultado`, { resultado: 'selecionado' }), 'gestor B resultado');
@@ -252,7 +283,12 @@ export const CATALOGO = [
   { id: 'SEG-045', manual: MANUAL.IAM, csf: 'PR.AA-05', titulo: 'Avaliador de outra organização não avalia', fn: async c => {
     naoOk(await c.avB.pedir('POST', `/api/avaliador/inscricoes/${c.inscA.protocolo}/avaliacao`, { notas: { qualidade: 1, viabilidade: 1, 'bonus-regional': 0 }, parecer: 'x' }), 'avaliador B');
   } },
-  { id: 'SEG-046', manual: MANUAL.LGPD, csf: 'PR.AA-05', titulo: 'Proponente não baixa anexo de outro', fn: async c => naoOk(await c.pB.pedir('GET', `/api/anexos/${c.anexoA.id}`), 'anexo de outro') },
+  { id: 'SEG-046', manual: MANUAL.LGPD, csf: 'PR.AA-05', titulo: 'Proponente não baixa anexo de outro, nem da mesma organização', fn: async c => {
+    naoOk(await c.pB.pedir('GET', `/api/anexos/${c.anexoA.id}`), 'outra organização');
+    const { cli } = await novaConta(c);
+    naoOk(await cli.pedir('GET', `/api/anexos/${c.anexoA.id}`), 'mesma organização');
+    assert.equal((await c.pA.pedir('GET', `/api/anexos/${c.anexoA.id}`)).status, 200);
+  } },
   { id: 'SEG-047', manual: MANUAL.INCIDENTE, csf: 'DE.CM-03', titulo: 'Acesso negado (403) entra na auditoria', fn: async c => {
     await c.pA.pedir('GET', '/api/gestor/editais');
     assert.ok((await acoes(c)).includes('acesso_negado'));
@@ -317,6 +353,10 @@ export const CATALOGO = [
     const r = await c.pA.pedir('PUT', '/api/conta/organizacao', { organizacao: 'org-a' }, { cabecalhos: { origin: 'https://malicioso.example' } });
     assert.equal(r.status, 403);
     assert.equal(r.corpo.erro, 'origem_invalida');
+    const porta = new URL(c.amb.base);
+    for (const origin of ['null', `http://${porta.hostname}:1`, 'file://']) {
+      assert.equal((await c.pA.pedir('PUT', '/api/conta/organizacao', { organizacao: 'org-a' }, { cabecalhos: { origin } })).status, 403, origin);
+    }
   } },
   { id: 'SEG-066', manual: MANUAL.DEV, csf: 'PR.PS-06', titulo: 'CSRF: Sec-Fetch-Site cross-site é recusado', fn: async c => {
     assert.equal((await c.pA.pedir('PUT', '/api/conta/organizacao', { organizacao: 'org-a' }, { cabecalhos: { 'sec-fetch-site': 'cross-site' } })).status, 403);
@@ -453,12 +493,32 @@ export const CATALOGO = [
   } },
 
   // Legislação e Ética (LGPD)
-  { id: 'SEG-099', manual: MANUAL.LGPD, csf: 'PR.DS-10', titulo: 'Sem e-mail configurado, o log não traz link, token nem e-mail completo', fn: async () => {
+  { id: 'SEG-099', manual: MANUAL.LGPD, csf: 'PR.DS-10', titulo: 'Sem e-mail configurado, o log do servidor não traz link, token nem e-mail completo', fn: async c => {
     const linhas = [];
     const log = { log: m => linhas.push(m), warn: m => linhas.push(m) };
     await emailDesligado({ log })({ para: 'pessoa.real@exemplo.example', assunto: 'Redefinição de senha', texto: 'link https://x/#/redefinir?token=SEGREDO', link: 'https://x/#/redefinir?token=SEGREDO', token: 'SEGREDO' });
-    const texto = linhas.join('\n');
-    assert.ok(!texto.includes('SEGREDO') && !texto.includes('pessoa.real@'));
+    assert.ok(!linhas.join('\n').includes('SEGREDO') && !linhas.join('\n').includes('pessoa.real@'));
+    // O servidor de verdade, com o e-mail padrão: captura o console durante um esqueci-senha.
+    const { criarApp } = await import('../app.js');
+    const { createServer } = await import('node:http');
+    const app = criarApp({ banco: c.amb.banco, anexos: c.amb.anexos, ipDe: () => '10.9.9.9' });
+    const servidor = createServer(app);
+    await new Promise(ok => servidor.listen(0, '127.0.0.1', ok));
+    const capturado = [];
+    const orig = { log: console.log, warn: console.warn, error: console.error, info: console.info };
+    for (const k of Object.keys(orig)) console[k] = (...a) => capturado.push(a.join(' '));
+    try {
+      const r = await fetch(`http://127.0.0.1:${servidor.address().port}/api/acesso/esqueci-senha`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ documento: c.amb.contas.a.gestor.documento }) });
+      assert.equal(r.status, 200);
+      await new Promise(ok => setTimeout(ok, 50));
+    } finally {
+      Object.assign(console, orig);
+      servidor.closeAllConnections();
+      await new Promise(ok => servidor.close(ok));
+    }
+    const texto = capturado.join('\n');
+    assert.ok(capturado.length > 0, 'o pedido deveria gerar um aviso no log');
+    assert.ok(!/token=|redefinir\?/.test(texto) && !texto.includes('gestor.a@teste.example'), texto);
   } },
   { id: 'SEG-100', manual: MANUAL.LGPD, csf: 'PR.AA-05', titulo: 'Avaliador não recebe e-mail nem telefone do proponente', fn: async c => {
     const r = await c.avA.pedir('GET', `/api/avaliador/inscricoes/${c.inscA.protocolo}`);
