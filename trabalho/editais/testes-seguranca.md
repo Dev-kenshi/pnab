@@ -1,4 +1,4 @@
-REPROVADO
+APROVADO (rodada 2)
 
 # Testes de segurança do editais, segunda passada independente
 
@@ -146,3 +146,87 @@ Itens fracos por nome:
 3. Corrigir F3.
 4. Corrigir as dicas de senha (F4) e, de preferência, um critério do portão 4 que leia a dica.
 5. Fechar as brechas de F5: SEG-099 pelo app e pelo log, Origin `null`, tempo do hash falso, anexo e inscrição de outro proponente da mesma organização, XFF.
+
+# Rodada 2
+
+Commits b9895b2 a 2fbdbef. A primeira linha do arquivo vale para esta rodada. O texto acima é o da rodada 1 (REPROVADO), mantido como histórico.
+
+## O que rodei de novo
+
+| Comando | Resultado |
+|---|---|
+| `cd entregas/editais && npm test` | 234 de 234 |
+| `node scripts/portoes/portao-3.mjs entregas/editais` | APROVADO |
+| `node scripts/portoes/portao-4.mjs ... --telas trabalho/editais/telas` | APROVADO, 4 larguras e 12 critérios |
+| `node trabalho/editais/r4-seg-ataque1.mjs` (saída em `tmp-r4/saida-seg1-r2.txt`) | 34 ok, 1 falha do meu script (ver abaixo) |
+| `node trabalho/editais/r4-seg-ataque2.mjs` (saída em `tmp-r4/saida-seg2-r2.txt`) | 57 ok, 1 falha do meu script (`sair` sem corpo, já explicada na rodada 1) |
+| `node trabalho/editais/r4-seg-ui.mjs` | sem erro de console |
+| `node trabalho/editais/r4-seg-trava.mjs` (novo, regressões da trava) | tudo ok, ver abaixo |
+| 16 mutações em cópia com `tmp-r4/r4-seg-mut.sh` | todas pegas pelo catálogo, ver abaixo |
+
+A falha do ataque 1 é do roteiro: o IP 127.0.0.1 já tinha estourado o limite de `/documento` no mesmo script, e agora `criar-conta` conta nesse limite, então a conta de teste do servidor 1 recebeu 429. É o comportamento novo, não defeito.
+
+## As 5 falhas da rodada 1
+
+| Falha | Situação | Prova |
+|---|---|---|
+| F1 corrida no login e na senha atual | CORRIGIDA | 120 logins paralelos: `{"401":5,"429":115}` (antes 119 avaliados). 30 paralelos: `{"401":5,"429":25}`. 20 senhas atuais erradas: `{"400":5,"429":15}` (antes 20). |
+| F2 XFF pelo primeiro item | CORRIGIDA | `<forjado>, <real>`: 30 respostas 200, depois 10 respostas 429. |
+| F3 criar-conta sem limite | CORRIGIDA | 25 chamadas do IP limitado: 25 respostas 429 em 42 ms, nenhuma 409. |
+| F4 dica "8 caracteres" | CORRIGIDA | Tela de criar conta: "Pelo menos 10 caracteres. Use uma frase só sua..." Conferi conta.js (10 ou 12 por papel), gestor.js e plataforma.js (12). Nenhum "8 caracteres" resta em `js/`. |
+| F5 validações fracas | CORRIGIDAS | Mutações abaixo. |
+
+## Mutações
+
+Refiz as 13 da rodada 1 mais 3 novas. Cada uma falhou no catálogo com a defesa desligada, e o catálogo continua com 101 testes (100 mais o de contagem).
+
+| Defesa desligada | Falhou |
+|---|---|
+| E-mail padrão imprime o link | SEG-099 |
+| Origin inválido aceito | SEG-065 |
+| Sem o hash falso | SEG-004 |
+| Anexo sem checar dono (mesma organização) | SEG-046 |
+| Inscrição sem checar dono | SEG-042 |
+| XFF pelo primeiro item | SEG-006 |
+| Sem `loginBloqueado` | SEG-005, 006, 094 |
+| Redefinição sem apagar sessões | SEG-029 |
+| Esqueci-senha sem limite por documento | SEG-033 |
+| Senha com CPF aceita | SEG-012 |
+| scrypt `p=1` | SEG-001, 009 |
+| Limite de `/documento` em 3000 | SEG-034 |
+| HSTS sem subdomínios | SEG-060 |
+| Nova: `comTrava` solta a trava antes de rodar | SEG-005, 027 |
+| Nova: limite de `criar-conta` desligado | SEG-034 |
+
+## Regressões da trava (`comTrava`)
+
+Li o código novo e testei com `r4-seg-trava.mjs`.
+
+- Ordem das chaves: sempre ordenadas e sem repetição, então não há deadlock. 500 travas com chaves cruzadas terminaram em 8 ms. Chaves repetidas funcionam.
+- Soltura após exceção: três chamadas na mesma chave, a do meio lança erro. A seguinte rodou e a trava seguinte foi obtida. Num login com falha interna simulada no banco (500), o login seguinte do mesmo IP e documento deu 200.
+- Cliente que desiste: 10 conexões cortadas depois de 20 ms. O login seguinte do mesmo IP deu 200 e o de outro IP também. A trava não ficou presa.
+- Justiça entre IPs: login legítimo de um IP levou 185 ms sozinho e 163 ms durante uma inundação de 80 pedidos de outro IP. Sem atraso.
+- 120 logins misturados (6 documentos, 4 IPs) terminaram em 1,2 s, sem travar.
+- Mapa de travas: a chave é apagada quando o último pedido solta. Não vi vazamento.
+
+Custo e efeitos que valem registro, sem reprovar:
+- Mesmo IP serializa. 12 logins certos de usuários diferentes, ao mesmo tempo, num IP só: 1863 ms. Em 12 IPs: 511 ms. Atrás de um proxy sem `TEB_CONFIAR_PROXY=1`, todos dividem um IP e o login vira fila de cerca de 6 por segundo. Em dia de abertura de edital, isso pode pesar.
+- Falta limite de espera na trava. Se uma consulta ao banco travar de vez (Turso fora do ar), os pedidos do mesmo IP e documento ficam em fila até o `requestTimeout` do servidor (60 s).
+- O login legítimo no mesmo IP de quem erra 5 vezes continua bloqueado por 15 minutos. Isso já era assim e é do desenho.
+- A criação de conta limita 10 por hora por IP e conta também respostas 400. 12 tentativas com senha curta: 10 respostas 400 e 2 respostas 429, e a 13ª, agora correta, também 429. Um usuário que erra o formulário 10 vezes, ou um telecentro com vários cadastros no mesmo IP, trava por 1 hora. Considerar contar só criações bem-sucedidas mais um limite maior para erros.
+- A trava vale para um processo. O doc avisa isso.
+
+## Docs
+
+`docs/seguranca.md` confere com o código: criar-conta 10 por hora e dupla contagem, trava em memória por documento, IP e usuário, último item do XFF, 6 mutações da rodada 2 (todas confirmadas por mim), avisos de processo único e de vários proxies. O histórico da passada 2 cita as falhas da rodada 1 de forma fiel.
+
+## Melhorias opcionais (não reprovam)
+
+As 10 da rodada 1 seguem valendo, exceto o item 10, que a equipe cumpriu. Acrescento:
+11. Limite de espera na trava e resposta 503 se passar de uns segundos.
+12. Rever o limite de `criar-conta` (item acima).
+13. Trava por IP só nos erros: o login certo não precisa ficar na fila do IP.
+
+## Limpeza
+
+Entrega intocada. Sem commit nem push. Apaguei `tmp-r4/mut-*` e `tmp-r4/seg`. Nenhum `principal.js` ativo. Ficam, ignorados pelo git: `r4-seg-trava.mjs`, `tmp-r4/saida-seg1-r2.txt`, `tmp-r4/saida-seg2-r2.txt`.
