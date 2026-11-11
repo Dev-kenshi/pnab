@@ -115,15 +115,16 @@ test('backup: envia banco aos 3 destinos e anexos só ao Drive e ao B2, tudo cif
 
 test('backup: anexos são incrementais e a retenção apaga só backups antigos do banco', async () => {
   const nuvem = nuvemFalsa();
+  const diario = () => destinosDoAmbiente({ ...TODAS, TEB_GITHUB_INTERVALO_DIAS: '0' }, { fetch: nuvem.fetch });
   for (let d = 1; d <= 4; d++) {
-    const r = await backup(nuvem, { reter: 2, agora: new Date(`2026-07-0${d}T03:00:00Z`) });
+    const r = await backup(nuvem, { reter: 2, agora: new Date(`2026-07-0${d}T03:00:00Z`), destinos: diario() });
     assert.equal(r.ok, true);
     const b2 = r.destinos.find(x => x.destino === 'Backblaze B2');
     assert.equal(b2.anexosEnviados, d === 1 ? 2 : 0);
     assert.equal(b2.anexosJaExistiam, d === 1 ? 0 : 2);
     assert.equal(b2.apagados, d <= 2 ? 0 : 1);
   }
-  for (const d of destinos(nuvem)) {
+  for (const d of diario()) {
     assert.deepEqual(await listarBackups(d), ['banco/2026-07-04T03-00-00-000Z.ndjson.gz.teb', 'banco/2026-07-03T03-00-00-000Z.ndjson.gz.teb'], d.nome);
   }
   assert.equal([...nuvem.b2.keys()].filter(k => k.startsWith('anexos/')).length, 2);
@@ -268,4 +269,84 @@ test('backup: comando de apoio cria a pasta do Drive e devolve o ID', async () =
   const nuvem = nuvemFalsa();
   const [drive] = destinos(nuvem);
   assert.match(await drive.criarPasta('Backup Sistema Integrado TEB'), /^pasta\d+$/);
+});
+
+test('correção 1: cadastro durante o backup não gera backup que deixa de restaurar', async () => {
+  const nuvem = nuvemFalsa();
+  const agora = new Date('2026-08-01T03:00:00Z');
+  const [r] = await Promise.all([
+    backup(nuvem, { agora }),
+    (async () => {
+      const org = await banco.executar('INSERT INTO organizacoes (slug, nome, criado_em) VALUES (?, ?, ?)', ['org-concorrente', 'Concorrente', agora.toISOString()]);
+      await inserirUsuario(banco, { organizacaoId: org.ultimoId, papel: 'proponente', nome: 'Entrou no meio', natureza: 'Pessoa Física', documento: gerarCPF(210000000), email: 'meio@teste.example', senha: SENHA, agora });
+    })(),
+  ]);
+  assert.equal(r.ok, true, JSON.stringify(r.destinos));
+  const alvo = join(pasta, 'concorrente.sqlite');
+  await restaurar({ destino: destinos(nuvem)[1], chave, abrirDestinoBanco: () => abrirBanco({ caminho: alvo }), pastaTemp: join(pasta, 'tmp') });
+});
+
+test('correção 1: backup que não restaura não é enviado', async () => {
+  const nuvem = nuvemFalsa();
+  const quebrado = {
+    tipo: 'sqlite',
+    transacao: fn => fn(quebrado),
+    executar: async sql => {
+      if (/sqlite_master/.test(sql)) return { linhas: [{ name: 'usuarios' }] };
+      if (/FROM usuarios/.test(sql)) return { linhas: [{ __rowid: 1, id: 1, organizacao_id: 999, papel: 'proponente', nome: 'x', documento: '1', email: 'x', senha_hash: 'x', criado_em: 'x' }] };
+      return { linhas: [] };
+    },
+  };
+  await assert.rejects(fazerBackup({ banco: quebrado, pastaAnexos, chave, destinos: destinos(nuvem), pastaTemp: join(pasta, 'tmp') }), /não restaura e não foi enviado/);
+  assert.equal(nuvem.b2.size + nuvem.github.size + nuvem.gdrive.size, 0);
+});
+
+test('correção 2: GitHub recebe o banco a cada 7 dias por padrão', async () => {
+  const nuvem = nuvemFalsa();
+  for (const dia of ['01', '03', '08', '09']) await backup(nuvem, { agora: new Date(`2026-09-${dia}T03:00:00Z`) });
+  assert.deepEqual([...nuvem.github.keys()].sort(), ['banco/2026-09-01T03-00-00-000Z.ndjson.gz.teb', 'banco/2026-09-08T03-00-00-000Z.ndjson.gz.teb']);
+  assert.equal([...nuvem.b2.keys()].filter(k => k.startsWith('banco/')).length, 4);
+  assert.throws(() => destinosDoAmbiente({ ...CRED.github, TEB_GITHUB_INTERVALO_DIAS: '-1' }), /INTERVALO/);
+});
+
+test('correção 3: relógio atrasado não apaga o backup recém-enviado', async () => {
+  const nuvem = nuvemFalsa();
+  await backup(nuvem, { reter: 1, agora: new Date('2026-07-10T03:00:00Z') });
+  const r = await backup(nuvem, { reter: 1, agora: new Date('2026-07-05T03:00:00Z') });
+  assert.equal(r.ok, true);
+  assert.ok(nuvem.b2.has('banco/2026-07-05T03-00-00-000Z.ndjson.gz.teb'));
+});
+
+test('correção 4: anexo adulterado na restauração diz qual anexo falhou', async () => {
+  const nuvem = nuvemFalsa();
+  await backup(nuvem, { agora: new Date('2026-07-01T03:00:00Z') });
+  const nome = `anexos/${ids[1]}.bin.teb`;
+  const a = nuvem.b2.get(nome);
+  const bytes = Buffer.from(a.bytes); bytes[30] ^= 1;
+  nuvem.b2.set(nome, { ...a, bytes });
+  await assert.rejects(
+    restaurar({ destino: destinos(nuvem)[1], chave, abrirDestinoBanco: () => abrirBanco({ caminho: join(pasta, 'c4.sqlite') }), pastaAnexos: join(pasta, 'anexos-c4'), pastaTemp: join(pasta, 'tmp') }),
+    new RegExp(`Anexo ${ids[1]}: Backup adulterado`),
+  );
+});
+
+test('correção 5 e 6: repositório com .. é recusado e arquivo vazio sem gzip decifra', async () => {
+  for (const repo of ['../x', 'x/..', './x', 'a/b/c']) assert.throws(() => githubPrivado({ token: 't', repo }), /dono\/nome/, repo);
+  const vazio = join(pasta, 'vazio.bin');
+  await writeFile(vazio, Buffer.alloc(0));
+  await cifrarArquivo(vazio, join(pasta, 'vazio.teb'), { chave, nome: 'anexos/v' });
+  await decifrarArquivo(join(pasta, 'vazio.teb'), join(pasta, 'vazio.volta'), { chave, nome: 'anexos/v' });
+  assert.equal((await readFile(join(pasta, 'vazio.volta'))).length, 0);
+});
+
+test('trava: duas execuções juntas não rodam e sobras de execução morta são apagadas', async () => {
+  const tmp = join(pasta, 'tmp-trava');
+  const { mkdir } = await import('node:fs/promises');
+  await mkdir(join(tmp, 'bkp-morto'), { recursive: true });
+  await writeFile(join(tmp, 'bkp-morto', 'banco.ndjson'), 'dados em claro');
+  const nuvem = nuvemFalsa();
+  await backup(nuvem, { pastaTemp: tmp });
+  assert.ok(!existsSync(join(tmp, 'bkp-morto')));
+  await writeFile(join(tmp, 'backup.trava'), 'outro');
+  await assert.rejects(backup(nuvem, { pastaTemp: tmp }), /em andamento/);
 });
