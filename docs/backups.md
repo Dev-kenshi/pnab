@@ -32,7 +32,9 @@ node servidor/principal.js restaurar b2
 - **Nome autenticado.** O nome de cada objeto entra na verificação AES-GCM. Arquivo adulterado, trocado de nome ou aberto com a chave errada é recusado. Nada parcial é gravado.
 - **Anexos com duas camadas.** No disco, eles já são cifrados com a chave dos anexos. O backup cifra de novo com a chave do backup.
 - **O que fica de fora.** Sessões, tentativas de login e tokens de redefinição de senha. Depois de uma restauração, todos entram de novo e links antigos de redefinição não valem.
-- **Retenção.** Ficam os `TEB_BACKUP_RETER` backups do banco mais novos em cada destino (padrão 14). Anexos não são apagados do backup.
+- **Retenção.** Ficam os `TEB_BACKUP_RETER` backups do banco mais novos em cada destino (padrão 14). O backup recém-enviado nunca é apagado, mesmo com o relógio do servidor atrasado. Anexos não são apagados do backup.
+- **Cópia consistente e conferida.** O banco é lido inteiro numa só transação, para um cadastro que entra no meio não quebrar o backup. Antes de enviar, o sistema restaura o arquivo num banco temporário. Se não restaurar, nada é enviado e o comando falha.
+- **Uma execução por vez.** Uma trava em `TEB_BACKUP_TEMP` impede dois backups juntos, por exemplo o do agendador e o interno. Trava com mais de 6 horas é descartada. Sobras de execuções que morreram no meio são apagadas no começo da próxima, porque podem ter o banco em claro.
 - **Falha isolada.** Um destino fora do ar não impede os outros. O comando termina com código 1 e mostra qual falhou, só com o código HTTP, nunca com token ou chave. Cada execução gera uma linha na auditoria: `backup_ok` ou `backup_falhou`.
 - **GitHub só privado.** Antes de enviar, o sistema confere se o repositório é privado. Se for público, não envia nada.
 - **Sem pacotes externos.** Só `fetch` e `node:crypto`.
@@ -60,10 +62,11 @@ Premissas:
 | Banco no Turso | 5 GB | Uma inscrição ocupa de 10 a 50 KB no banco, sem os PDFs. Os 5 GB dão para centenas de milhares de inscrições. O limite real são os anexos. |
 | Google Drive | 15 GB, divididos com o Gmail e o Google Fotos da mesma conta | Cabe o espelho dos 10 GB de anexos mais as 14 cópias do banco. Use uma conta Google só para o backup. |
 | Backblaze B2 | 10 GB grátis | Igual ao R2: cabe o espelho dos 10 GB. Acima disso, cobra por GB e por mês. Consulte o preço atual no site da Backblaze antes de passar do limite. |
-| GitHub privado | Repositório recomendado até 1 GB, arquivo até 50 MB (o sistema recusa acima disso) | Com 2.000 inscrições, o banco compactado fica perto de 10 MB, e 14 cópias dão 140 MB. Folga grande. |
+| GitHub privado | Repositório recomendado até 1 GB, arquivo até 50 MB (o sistema recusa acima disso) | O Git guarda no histórico todo arquivo apagado, então a retenção não libera espaço. Por isso o GitHub recebe o banco **uma vez por semana** (`TEB_GITHUB_INTERVALO_DIAS=7`). Com 2.000 inscrições, o banco compactado fica perto de 10 MB, e um ano dá cerca de 520 MB. Crie um repositório novo por ano. |
 
 O que olhar com o tempo:
 - **Anexos apagados continuam no backup.** Com os anos, o backup pode passar do tamanho dos dados vivos. Faça uma limpeza manual uma vez por ano, ou crie conta e bucket novos por ano de edital.
+- **Histórico do GitHub.** Apagar arquivos não diminui o repositório. Ao passar de 1 GB, crie um repositório novo, troque `TEB_GITHUB_REPO` e apague o antigo depois de conferir o novo.
 - **Banco compactado acima de 50 MB.** O GitHub passa a recusar e marca a falha. O Drive e o B2 continuam. Nesse ponto, desligue o GitHub ou troque por outro destino.
 - **Drive perto de 15 GB.** O envio falha com o código do Google. Libere espaço ou use outra conta.
 
@@ -106,7 +109,7 @@ node servidor/principal.js criar-pasta-drive
 
 1. Crie um repositório **privado** vazio, por exemplo `empresa/backup-teb`. Nunca use o repositório público do sistema.
 2. Crie um token fino (fine-grained) com acesso **só a esse repositório**, permissão "Contents: Read and write" e validade de até 1 ano. Anote a data de renovação.
-3. Preencha `TEB_GITHUB_TOKEN`, `TEB_GITHUB_REPO` (no formato `dono/nome`) e, se precisar, `TEB_GITHUB_RAMO`.
+3. Preencha `TEB_GITHUB_TOKEN`, `TEB_GITHUB_REPO` (no formato `dono/nome`) e, se precisar, `TEB_GITHUB_RAMO` e `TEB_GITHUB_INTERVALO_DIAS` (padrão 7).
 
 Destino com todas as variáveis vazias fica desligado. Destino com variáveis pela metade é erro, para ninguém achar que tem backup sem ter.
 
@@ -154,13 +157,15 @@ node servidor/principal.js restaurar b2 banco/2026-07-01T03-00-00-000Z.ndjson.gz
 4. Aponte `TEB_BANCO` para o banco restaurado e `TEB_ANEXOS` para a pasta restaurada. Suba o servidor e confira um login, uma inscrição e o download de um anexo.
 5. Avise as pessoas que elas precisam entrar de novo, porque as sessões não vão no backup.
 
+Se a restauração falhar no meio, por exemplo com um anexo adulterado, a mensagem diz qual anexo falhou. O banco restaurado pela metade é apagado sozinho. Os anexos que já foram gravados ficam na pasta e são reaproveitados na próxima tentativa. Tente de novo com outro destino.
+
 Para restaurar no Turso: restaure primeiro no SQLite local, como acima. Depois importe o arquivo no Turso com a ferramenta oficial deles (`turso db import`) e só então troque as variáveis `TURSO_*`.
 
 **Teste a restauração uma vez por mês** numa máquina separada. Backup que nunca foi restaurado não é backup confiável.
 
 ## Testes
 
-`servidor/testes/backup.test.js` tem 16 testes, todos sem rede. Os três destinos são simulados por `servidor/testes/nuvem-falsa.js`. Os testes cobrem:
+`servidor/testes/backup.test.js` tem 23 testes, todos sem rede. Os três destinos são simulados por `servidor/testes/nuvem-falsa.js`. Os testes cobrem:
 - cifra, adulteração, chave errada e nome trocado;
 - sessões e tokens fora do backup;
 - envio aos 3 destinos, com o GitHub sem anexos;
@@ -170,10 +175,13 @@ Para restaurar no Turso: restaure primeiro no SQLite local, como acima. Depois i
 - recusa de GitHub público e de arquivo acima de 50 MB;
 - criação da pasta do Drive;
 - variáveis pela metade;
-- restauração completa tabela por tabela, com anexos idênticos e chaves estrangeiras íntegras.
+- restauração completa tabela por tabela, com anexos idênticos e chaves estrangeiras íntegras;
+- cadastro durante o backup e backup que não restaura (não é enviado);
+- intervalo do GitHub, relógio atrasado, anexo adulterado com o id na mensagem, arquivo vazio e trava.
 
 ## Limites conhecidos
 
 - Os anexos são lidos da pasta local (`TEB_ANEXOS`). O adaptador R2 dos anexos está previsto, mas ainda não existe. Quando existir, o backup vai precisar ler do R2.
 - Os destinos reais nunca foram chamados nesta sessão, porque não há conta nem rede. O formato das chamadas segue a documentação pública do Google Drive v3, do B2 v3 e da API de conteúdo do GitHub. No primeiro uso, rode um backup e uma restauração de teste.
+- Enquanto o banco é exportado, os outros pedidos ao servidor esperam, porque a leitura é numa só transação. Com o banco pequeno, isso dura frações de segundo. Rode o backup de madrugada.
 - O banco é exportado e cada arquivo é enviado inteiro, sem divisão em partes. Isso vale até algumas centenas de MB por backup. Acima disso, vai ser preciso dividir o envio em partes.
