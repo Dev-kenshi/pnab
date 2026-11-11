@@ -96,7 +96,7 @@ test('S3: com HTTPS o cookie leva Secure e a sessão vence em 8 horas', async ()
     const c = seguro.cliente();
     const r = await c.pedir('POST', '/api/acesso/entrar', { documento: seguro.contas.a.gestor.documento, senha: SENHA });
     assert.match(r.setCookie[0], /; Secure/);
-    assert.equal(r.cabecalhos.get('strict-transport-security'), 'max-age=31536000');
+    assert.equal(r.cabecalhos.get('strict-transport-security'), 'max-age=31536000; includeSubDomains');
     seguro.relogio.avancar(8 * 60 * 60 * 1000 + 1000);
     const vencida = await c.pedir('GET', '/api/sessao');
     assert.equal(vencida.status, 200);

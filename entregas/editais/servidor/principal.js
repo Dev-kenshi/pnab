@@ -16,6 +16,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import * as regras from '../js/regras.js';
 import { criarApp } from './app.js';
+import { emailDoAmbiente } from './email.js';
 import { registrar } from './auditoria.js';
 import { abrirBanco } from './banco.js';
 import { criarArmazemDisco, lerChave } from './anexos.js';
@@ -140,7 +141,10 @@ async function servir() {
   const banco = await abrir();
   const anexos = criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave });
   const porta = Number(env.PORTA || 3000);
+  let enviarEmail;
+  try { enviarEmail = emailDoAmbiente(env); } catch (e) { sair(e.message); }
   const app = criarApp({
+    enviarEmail,
     banco,
     anexos,
     https: env.TEB_HTTPS === '1',

@@ -1,7 +1,7 @@
 // Rotas da conta: dados, senha, organização do proponente e busca de CEP.
 import * as regras from '../../js/regras.js';
 import { buscarUsuario, usuarioPublico } from '../banco.js';
-import { falha, hashSenha, verificarSenha } from '../seguranca.js';
+import { LIMITES, contarUso, dentroDoLimite, falha, hashSenha, verificarSenha, zerarUso } from '../seguranca.js';
 import { conferirSenhaNova, texto } from './acesso.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,9 +57,17 @@ export default [
     metodo: 'PUT', caminho: '/api/conta/senha', papel: 'logado',
     fn: async ctx => {
       const c = ctx.corpo;
+      // Quem pegou uma sessão aberta não pode testar senhas à vontade: 5 erros em 15 minutos bloqueiam.
+      const regra = LIMITES.senhaAtualPorUsuario;
+      if (!(await dentroDoLimite(ctx.banco, regra, ctx.usuario.id, ctx.agora))) {
+        await ctx.auditar('limite_excedido', { alvo: 'senha-atual' });
+        throw falha(429, 'limite', 'Muitas tentativas com a senha atual. Tente de novo em 15 minutos.');
+      }
       if (!(await verificarSenha(typeof c.senhaAtual === 'string' ? c.senhaAtual : '', ctx.usuario.senha_hash))) {
+        await contarUso(ctx.banco, regra, ctx.usuario.id, ctx.agora);
         throw falha(400, 'senha_atual_incorreta', 'A senha atual não confere.');
       }
+      await zerarUso(ctx.banco, regra, ctx.usuario.id);
       const campos = conferirSenhaNova(c.novaSenha, c.novaSenhaConfirmacao, 'novaSenha', 'novaSenhaConfirmacao', ctx.usuario);
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       const senhaHash = await hashSenha(c.novaSenha);
