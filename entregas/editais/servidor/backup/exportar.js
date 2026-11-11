@@ -34,19 +34,24 @@ async function escrever(fluxo, obj) {
 }
 
 // Grava o banco em `caminho`. Devolve a contagem de linhas por tabela.
+// Tudo é lido dentro de uma única transação: um cadastro que entra no meio não quebra as chaves estrangeiras.
 export async function exportarBanco(banco, caminho, { agora = new Date() } = {}) {
+  return banco.transacao(tx => exportarDentro(tx, banco.tipo, caminho, agora));
+}
+
+async function exportarDentro(banco, tipo, caminho, agora) {
   const fluxo = createWriteStream(caminho, { mode: 0o600 });
   const contagem = {};
   try {
-    await escrever(fluxo, { teb: 'backup-banco', versao: 1, criadoEm: agora.toISOString(), origem: banco.tipo });
+    await escrever(fluxo, { teb: 'backup-banco', versao: 1, criadoEm: agora.toISOString(), origem: tipo });
     for (const tabela of await tabelasDo(banco)) {
       if (TABELAS_FORA.has(tabela)) continue;
       contagem[tabela] = 0;
       await escrever(fluxo, { tabela });
-      for (let ultimo = -Infinity; ;) {
+      for (let ultimo = Number.MIN_SAFE_INTEGER; ;) {
         const { linhas } = await banco.executar(
           `SELECT rowid AS __rowid, * FROM ${tabela} WHERE rowid > ? ORDER BY rowid LIMIT ${LOTE}`,
-          [ultimo === -Infinity ? -9007199254740991 : ultimo],
+          [ultimo],
         );
         for (const l of linhas) {
           ultimo = Number(l.__rowid);

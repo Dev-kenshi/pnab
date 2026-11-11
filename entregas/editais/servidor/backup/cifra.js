@@ -66,11 +66,13 @@ export async function decifrarArquivo(origem, destino, { chave, nome, gzip = fal
   decifra.setAAD(aad(nome));
   decifra.setAuthTag(tag);
   const temporario = `${destino}.parcial`;
-  const etapas = [createReadStream(origem, { start: CABECALHO, end: size - TAG - 1 }), decifra];
+  // Conteúdo cifrado vazio: createReadStream não aceita end < start, então a fonte é um gerador vazio.
+  const fonte = size - TAG - CABECALHO === 0 ? vazio() : createReadStream(origem, { start: CABECALHO, end: size - TAG - 1 });
+  const etapas = [fonte, decifra];
   if (gzip) etapas.push(createGunzip());
   etapas.push(createWriteStream(temporario, { mode: 0o600 }));
   try {
-    await pipeline(size - TAG - CABECALHO === 0 ? [vazio(), decifra, ...etapas.slice(2)] : etapas);
+    await pipeline(etapas);
   } catch (e) {
     await rm(temporario, { force: true });
     if (/auth|unsupported state/i.test(String(e?.message))) throw new Error('Backup adulterado ou chave errada: a verificação AES-GCM falhou.');

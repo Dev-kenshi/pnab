@@ -43,7 +43,8 @@ export function googleDrive({ clientId, clientSecret, refreshToken, pastaId, fet
     const saida = [];
     let pagina = '';
     do {
-      const q = `'${aspas(pastaId)}' in parents and trashed = false and name contains '${aspas(prefixo)}'`;
+      // Lista a pasta inteira e filtra aqui: o "name contains" do Drive casa por termo e falha com / - e . no nome.
+      const q = `'${aspas(pastaId)}' in parents and trashed = false`;
       const url = new URL('https://www.googleapis.com/drive/v3/files');
       url.search = new URLSearchParams({ q, fields: 'nextPageToken,files(id,name,size)', pageSize: '1000', spaces: 'drive', ...(pagina ? { pageToken: pagina } : {}) });
       const r = await exigirOk(await f(url, { headers: await cab() }), quem, 'listar');
@@ -164,9 +165,12 @@ export function backblazeB2({ keyId, appKey, bucketId, bucketNome, fetch: f = gl
 // Token fino (fine-grained) com acesso só a esse repositório e permissão Contents: leitura e escrita.
 export const GITHUB_MAXIMO = 50 * 1024 * 1024;
 
-export function githubPrivado({ token, repo, ramo = 'main', fetch: f = globalThis.fetch }) {
+// O Git guarda no histórico todo arquivo apagado. Por isso o GitHub recebe o banco só a cada `intervaloDias`.
+export function githubPrivado({ token, repo, ramo = 'main', intervaloDias = 7, fetch: f = globalThis.fetch }) {
   const quem = 'GitHub';
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(String(repo))) throw new Error('TEB_GITHUB_REPO precisa ser dono/nome.');
+  const partes = String(repo).split('/');
+  if (partes.length !== 2 || partes.some(p => !/^[A-Za-z0-9_.-]+$/.test(p) || /^\.+$/.test(p))) throw new Error('TEB_GITHUB_REPO precisa ser dono/nome.');
+  if (!Number.isInteger(intervaloDias) || intervaloDias < 0) throw new Error('TEB_GITHUB_INTERVALO_DIAS precisa ser um inteiro de 0 para cima.');
   const base = `https://api.github.com/repos/${repo}`;
   const cab = extra => ({ Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'sistema-integrado-teb', ...extra });
   let conferido = false;
@@ -191,6 +195,7 @@ export function githubPrivado({ token, repo, ramo = 'main', fetch: f = globalThi
     nome: 'GitHub privado',
     chave: 'github',
     guardaAnexos: false,
+    intervaloDias,
     async enviar(nome, bytes) {
       await conferirPrivado();
       if (bytes.length > GITHUB_MAXIMO) throw new ErroDestino(`${quem}: backup do banco passa de 50 MB. Use o B2 ou o Drive para esse tamanho.`);
@@ -228,7 +233,10 @@ export function destinosDoAmbiente(env, { fetch } = {}) {
     lista.push(backblazeB2({ keyId: env.TEB_B2_KEY_ID, appKey: env.TEB_B2_APP_KEY, bucketId: env.TEB_B2_BUCKET_ID, bucketNome: env.TEB_B2_BUCKET_NOME, fetch }));
   }
   if (exigirVariaveis(env, ['TEB_GITHUB_TOKEN', 'TEB_GITHUB_REPO'], 'GitHub')) {
-    lista.push(githubPrivado({ token: env.TEB_GITHUB_TOKEN, repo: env.TEB_GITHUB_REPO, ramo: env.TEB_GITHUB_RAMO || 'main', fetch }));
+    lista.push(githubPrivado({
+      token: env.TEB_GITHUB_TOKEN, repo: env.TEB_GITHUB_REPO, ramo: env.TEB_GITHUB_RAMO || 'main',
+      intervaloDias: Number(env.TEB_GITHUB_INTERVALO_DIAS ?? 7), fetch,
+    }));
   }
   return lista;
 }
