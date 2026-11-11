@@ -1,7 +1,7 @@
 // Rotas da conta: dados, senha, organização do proponente e busca de CEP.
 import * as regras from '../../js/regras.js';
 import { buscarUsuario, usuarioPublico } from '../banco.js';
-import { LIMITES, contarUso, dentroDoLimite, falha, hashSenha, verificarSenha, zerarUso } from '../seguranca.js';
+import { LIMITES, comTrava, contarUso, dentroDoLimite, falha, hashSenha, verificarSenha, zerarUso } from '../seguranca.js';
 import { conferirSenhaNova, texto } from './acesso.js';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -59,6 +59,7 @@ export default [
       const c = ctx.corpo;
       // Quem pegou uma sessão aberta não pode testar senhas à vontade: 5 erros em 15 minutos bloqueiam.
       const regra = LIMITES.senhaAtualPorUsuario;
+      return comTrava([`senha-atual:${ctx.usuario.id}`], async () => {
       if (!(await dentroDoLimite(ctx.banco, regra, ctx.usuario.id, ctx.agora))) {
         await ctx.auditar('limite_excedido', { alvo: 'senha-atual' });
         throw falha(429, 'limite', 'Muitas tentativas com a senha atual. Tente de novo em 15 minutos.');
@@ -75,6 +76,7 @@ export default [
       await ctx.banco.executar('DELETE FROM sessoes WHERE usuario_id = ? AND token_hash <> ?', [ctx.usuario.id, ctx.sessaoHash]);
       await ctx.auditar('senha_alterada', { alvo: ctx.usuario.documento });
       return { status: 204 };
+      });
     },
   },
   {

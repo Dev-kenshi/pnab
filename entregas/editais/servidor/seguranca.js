@@ -103,6 +103,29 @@ export async function registrarErroLogin(banco, { documento, ip, agora }) {
   }
 }
 
+// Trava em memória por chave. Pedidos com a mesma chave (documento, IP, usuário) rodam um de cada vez.
+// Sem ela, vários logins em paralelo liam o contador antes de qualquer erro ser gravado e passavam do limite.
+// Vale para um processo só (SQLite local). Com várias instâncias, use um limitador na frente (proxy).
+const travas = new Map();
+export async function comTrava(chaves, fn) {
+  const ordenadas = [...new Set(chaves.map(String))].sort();
+  const liberar = [];
+  try {
+    for (const chave of ordenadas) {
+      const anterior = travas.get(chave) || Promise.resolve();
+      let soltar;
+      const atual = new Promise(ok => { soltar = ok; });
+      const cadeia = anterior.then(() => atual);
+      travas.set(chave, cadeia);
+      await anterior;
+      liberar.push(() => { soltar(); if (travas.get(chave) === cadeia) travas.delete(chave); });
+    }
+    return await fn();
+  } finally {
+    for (const l of liberar.reverse()) l();
+  }
+}
+
 // Limite de uso por janela de tempo (documento, esqueci a senha, senha atual).
 // Usa a mesma tabela do login com prefixos próprios. Aqui `bloqueado_ate` guarda o fim da janela.
 export const LIMITES = {
@@ -110,6 +133,7 @@ export const LIMITES = {
   esqueciPorIp: { prefixo: 'esq-ip', limite: 10, janelaMs: 60 * 60 * 1000 },
   esqueciPorDocumento: { prefixo: 'esq-doc', limite: 3, janelaMs: 60 * 60 * 1000 },
   senhaAtualPorUsuario: { prefixo: 'senha-atual', limite: 5, janelaMs: 15 * 60 * 1000 },
+  criarContaPorIp: { prefixo: 'conta-ip', limite: 10, janelaMs: 60 * 60 * 1000 },
 };
 
 // Conta um uso. Devolve true se ainda está dentro do limite.
@@ -171,11 +195,12 @@ export function cookieExpirado({ https }) {
   return attrs.join('; ');
 }
 
-// IP do cliente. X-Forwarded-For só com proxy confiável.
+// IP do cliente. X-Forwarded-For só com proxy confiável, e só o ÚLTIMO item:
+// é o que o proxy acrescentou. Os anteriores vêm do cliente e podem ser forjados.
 export function ipPadrao({ confiarProxy }) {
   return req => {
     if (confiarProxy) {
-      const xff = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+      const xff = String(req.headers['x-forwarded-for'] || '').split(',').map(s => s.trim()).filter(Boolean).at(-1);
       if (xff) return xff;
     }
     return req.socket?.remoteAddress || 'desconhecido';

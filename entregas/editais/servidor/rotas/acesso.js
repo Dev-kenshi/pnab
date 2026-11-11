@@ -2,7 +2,7 @@
 import * as regras from '../../js/regras.js';
 import { SQL_USUARIO, buscarUsuario, usuarioPublico } from '../banco.js';
 import {
-  LIMITES, REDEFINICAO_MS, SENHA_PROIBIDA, SESSAO_MS, contarUso, cookieExpirado, cookieSessao, documentoReservado, falha, gerarToken,
+  LIMITES, REDEFINICAO_MS, SENHA_PROIBIDA, SESSAO_MS, comTrava, contarUso, cookieExpirado, cookieSessao, documentoReservado, falha, gerarToken,
   hashSenha, hashToken, loginBloqueado, precisaRefazerHash, registrarErroLogin, verificarSenha, verificarSenhaFicticia, zerarErrosDocumento,
 } from '../seguranca.js';
 
@@ -112,6 +112,8 @@ export default [
       const { banco, agora, ip } = ctx;
       const digitos = exigirDocumento(ctx.corpo.documento);
       const senha = typeof ctx.corpo.senha === 'string' ? ctx.corpo.senha : '';
+      // Um login por documento e por IP de cada vez: o erro é gravado antes do próximo ler o contador.
+      return comTrava([`login-doc:${digitos}`, `login-ip:${ip}`], async () => {
       if (await loginBloqueado(banco, { documento: digitos, ip, agora })) {
         await ctx.auditar('login_bloqueado', { alvo: digitos });
         throw falha(429, 'bloqueado', 'Muitas tentativas. Tente de novo em 15 minutos.');
@@ -132,6 +134,7 @@ export default [
       const cookie = await abrirSessao(ctx, usuario.id);
       await ctx.auditar('login', { usuarioId: usuario.id, organizacaoId: usuario.organizacao_id, alvo: digitos });
       return { corpo: { usuario: usuarioPublico(usuario) }, cabecalhos: { 'Set-Cookie': cookie } };
+      });
     },
   },
   {
@@ -145,6 +148,13 @@ export default [
     metodo: 'POST', caminho: '/api/acesso/criar-conta', papel: 'publico',
     fn: async ctx => {
       const c = ctx.corpo;
+      // A criação de conta também revela se o documento existe (409): conta no mesmo limite da consulta.
+      const dentroConta = await contarUso(ctx.banco, LIMITES.criarContaPorIp, ctx.ip, ctx.agora);
+      const dentroDoc = await contarUso(ctx.banco, LIMITES.documentoPorIp, ctx.ip, ctx.agora);
+      if (!dentroConta || !dentroDoc) {
+        await ctx.auditar('limite_excedido', { alvo: 'criar-conta' });
+        throw falha(429, 'limite', MSG_LIMITE);
+      }
       const { digitos, nome, email, campos } = validarDadosConta(c, { exigirConfirmacao: true });
       const natureza = texto(c.natureza, 40);
       const telefone = regras.somenteDigitos(c.telefone).slice(0, 15);
