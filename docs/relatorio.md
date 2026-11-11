@@ -9,11 +9,11 @@ Emanuel Macêdo Luz, desenvolvedor do projeto.
 |---|---|---|
 | 1. F7 (teto absurdo dava HTTP 500) | Feita e na `main` | Testador: rodada 4 aprovada (`trabalho/editais/testes.md`) |
 | 2. Backups cifrados em 3 destinos | Feita e na `main` | Testador: reprovou na rodada 1, aprovou na rodada 3 (`trabalho/editais/testes-backup.md`) |
-| 3. Segurança: 100 validações e duplo teste | PREENCHER | PREENCHER |
-| 4. Push na `main` a cada etapa aprovada | Feito | Merges `a2e1b85` (F7) e `2b5b052` (backups e senha), e o da segurança |
+| 3. Segurança: 100 validações e duplo teste | Feita e na `main` | Duplo teste: passada do construtor com 100 de 100 e mutação; passada do testador reprovou na rodada 1 e aprovou na rodada 2 (`trabalho/editais/testes-seguranca.md`) |
+| 4. Push na `main` a cada etapa aprovada | Feito | Merges `a2e1b85` (F7), `2b5b052` (backups e senha) e o merge da segurança |
 | 5. Este relatório | Feito | |
 
-Números finais: PREENCHER testes em `npm test`, portão 3 aprovado, portão 4 aprovado (C1 a C12, 4 larguras).
+Números finais: 234 testes em `npm test`, todos passando, portão 3 aprovado, portão 4 aprovado (C1 a C12, 4 larguras).
 
 ## O que foi feito
 
@@ -38,7 +38,10 @@ Números finais: PREENCHER testes em `npm test`, portão 3 aprovado, portão 4 a
 - **100 validações.** Ficam em `servidor/testes/seguranca-catalogo.js`. Cada uma está ligada a uma seção do manual e a uma subcategoria do CSF.
 - **Duplo teste.**
   - Passada 1, do construtor: 100 de 100, conferidas por mutação. Com quatro defesas desligadas, seis validações falharam como esperado.
-  - Passada 2, do testador: PREENCHER.
+  - Passada 2, do testador, independente:
+    - Rodada 1 reprovou. A falha alta era que 120 logins em paralelo passavam do limite de 5 erros, e a senha certa entrava.
+    - As falhas médias eram o `X-Forwarded-For` forjável, a criação de conta sem limite, a dica de 8 caracteres nas telas e 6 validações fracas, pegas por 13 mutações dele.
+    - Tudo foi corrigido. A rodada 2 aprovou, com 16 de 16 mutações pegas e sem deadlock na trava nova.
 - **Melhorias.**
   - Política de senha do NIST SP 800-63B, nas telas, no servidor e na demonstração.
   - scrypt mais forte, refeito no login.
@@ -71,6 +74,10 @@ Números finais: PREENCHER testes em `npm test`, portão 3 aprovado, portão 4 a
    - Verificação em duas etapas (TOTP) para gestor e plataforma.
    - Comando para trocar a chave dos anexos.
    - Antivírus nos PDFs.
+   - Atrás de proxy, ligar `TEB_CONFIAR_PROXY=1`. Sem isso, todos os logins dividem um IP e entram em fila na trava.
+   - Tempo máximo de espera na trava de login.
+   - O limite de criação de conta hoje conta também as tentativas recusadas.
+   - `POST /api/acesso/sair` sem corpo dá 415. O front envia `{}`.
 6. **Melhorias opcionais registradas pelo testador.**
    - Validar nota e parecer na tela antes de enviar.
    - Renovar a trava em backup que passe de 6 horas.
