@@ -68,6 +68,17 @@ Desliguei de propósito quatro defesas e rodei as 100 validações. As validaç�
 
 Com o código restaurado, as 100 passam.
 
+Na segunda passada, o testador fez 13 mutações e achou 6 validações fracas. Elas foram reforçadas e conferidas de novo:
+
+| Defesa desligada (rodada 2) | Validação que falhou |
+|---|---|
+| Logins em paralelo sem trava | SEG-005 |
+| `X-Forwarded-For` lendo o primeiro item | SEG-006 |
+| `Origin: null` aceito | SEG-065 |
+| Sem o scrypt falso para documento sem conta (enumeração por tempo) | SEG-004 |
+| Criação de conta sem limite | SEG-034 |
+| E-mail padrão do servidor imprimindo o link | SEG-099 |
+
 ## Melhorias de segurança feitas nesta etapa
 
 1. **Política de senha (NIST SP 800-63B).**
@@ -80,7 +91,9 @@ Com o código restaurado, as 100 passam.
 3. **Limites de tentativa** (pendências fechadas):
    - consulta de documento: 30 por 15 minutos por IP;
    - esqueci a senha: 10 por hora por IP, e 3 e-mails por hora por documento, com a mesma resposta para não revelar se a conta existe;
-   - senha atual na troca de senha: 5 erros em 15 minutos bloqueiam.
+   - senha atual na troca de senha: 5 erros em 15 minutos bloqueiam;
+   - criação de conta: 10 por hora por IP, e cada uma conta também no limite da consulta de documento, porque o 409 revela se a conta existe;
+   - **trava em memória** por documento, por IP e por usuário. Sem ela, 120 logins em paralelo passavam do limite e a senha certa entrava. Vale para um processo só: com várias instâncias, ponha um limitador no proxy.
 4. **Link de redefinição fora do log** (pendência fechada).
    - Sem e-mail configurado, o log diz só que houve um pedido, com o e-mail mascarado e sem link nem token.
    - Com o Resend configurado, o link vai por e-mail.
@@ -121,7 +134,8 @@ Regras práticas:
 
 - **E-mail real.** O adaptador Resend existe, mas nunca foi chamado de verdade, porque não há conta nem rede aqui. Sem configuração, o link de redefinição não chega a ninguém. A pessoa precisa pedir à equipe a troca de senha.
 - **Turso real.** O adaptador foi testado contra um Turso simulado, não contra o serviço.
-- **Limites por IP atrás de proxy.** Eles só funcionam bem com `TEB_CONFIAR_PROXY=1` quando o site está atrás de um proxy confiável, como o do Replit. Sem isso, todos os pedidos parecem vir do mesmo IP.
+- **Limites por IP atrás de proxy.** Eles só funcionam bem com `TEB_CONFIAR_PROXY=1` quando o site está atrás de um proxy confiável, como o do Replit. O sistema usa o último item de `X-Forwarded-For`, que é o que o proxy acrescenta. Sem isso, todos os pedidos parecem vir do mesmo IP. Com mais de um proxy em sequência, é preciso ajustar o código.
+- **Trava de login em memória.** Ela vale para um processo só. Com várias instâncias do servidor, use também um limitador na frente.
 - **Sem verificação em duas etapas no sistema.** Para gestor e plataforma, é a próxima melhoria recomendada (TOTP).
 - **Sem troca de chave dos anexos.** Não há comando para recifrar os anexos com uma chave nova.
 - **Sem antivírus nos PDFs.** O sistema confere o tipo e o tamanho, mas não procura vírus.
@@ -235,4 +249,8 @@ Regras práticas:
 ## Duplo teste
 
 - **Passada 1 (construtor).** 100 de 100, e a suíte completa com 234 de 234. A mutação está descrita acima.
-- **Passada 2 (agente testador, independente).** Veja `trabalho/editais/testes-seguranca.md`.
+- **Passada 2 (agente testador, independente), rodada 1.** REPROVADO:
+  - 1 falha alta: logins em paralelo contornavam o limite;
+  - 4 médias: `X-Forwarded-For`, criação de conta sem limite, dica de 8 caracteres nas telas e 6 validações fracas.
+  - Todas corrigidas. Detalhes em `trabalho/editais/testes-seguranca.md`.
+- **Passada 2, rodada 2.** Veja o mesmo arquivo.
