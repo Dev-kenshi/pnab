@@ -123,12 +123,17 @@ export function erroValorItem(valor) {
   return null;
 }
 
+// Teto máximo do edital: igual ao máximo do item, R$ 10.000.000,00, em centavos.
+// Evita números que estouram o inteiro do banco (F7).
+export const TETO_MAXIMO = VALOR_ITEM_MAXIMO;
+
 // Teto do edital, em centavos inteiros. A mensagem fala em reais, como o campo da tela.
 export function erroTeto(teto) {
   if (vazio(teto)) return obrigatorio('Teto do orçamento (R$)');
   const n = typeof teto === 'boolean' ? NaN : Number(teto);
   if (!Number.isFinite(n) || !Number.isInteger(n)) return 'Teto inválido. Informe o valor em reais, como 10.000,00.';
   if (n <= 0) return 'O teto precisa ser maior que R$ 0,00.';
+  if (n > TETO_MAXIMO) return `Teto acima do máximo de ${formatarMoeda(TETO_MAXIMO)}.`;
   return null;
 }
 
