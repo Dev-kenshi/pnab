@@ -22,17 +22,18 @@ export function exigirDocumento(valor) {
 }
 
 // Regras comuns a toda criação de conta e troca de senha.
-export function conferirSenhaNova(senha, confirmacao, campo = 'senha', campoConfirmacao = 'senhaConfirmacao') {
+// contexto: { papel, documento, nome, email } da conta, para recusar senha com dados dela.
+export function conferirSenhaNova(senha, confirmacao, campo = 'senha', campoConfirmacao = 'senhaConfirmacao', contexto = {}) {
   if (senha === SENHA_PROIBIDA) throw falha(400, 'senha_proibida', 'Essa senha é de demonstração e não vale aqui. Escolha outra.');
   const campos = [];
-  const msg = regras.validarSenha(senha);
+  const msg = regras.validarSenha(senha, contexto);
   if (msg) campos.push({ campo, mensagem: msg });
   if (confirmacao !== undefined && senha !== confirmacao) campos.push({ campo: campoConfirmacao, mensagem: 'A confirmação não confere com a senha.' });
   return campos;
 }
 
 // Valida nome, documento, e-mail e senha de uma conta nova. Lança erro com os campos.
-export function validarDadosConta(corpo, { exigirConfirmacao = false, documentoComoCampo = false } = {}) {
+export function validarDadosConta(corpo, { exigirConfirmacao = false, documentoComoCampo = false, papel = 'proponente' } = {}) {
   const digitos = regras.somenteDigitos(corpo.documento);
   const campos = [];
   if (documentoComoCampo) {
@@ -41,9 +42,9 @@ export function validarDadosConta(corpo, { exigirConfirmacao = false, documentoC
     exigirDocumento(digitos);
   }
   if (documentoReservado(digitos)) throw falha(400, 'documento_reservado', 'Esse documento é reservado para demonstração.');
-  campos.push(...conferirSenhaNova(corpo.senha, exigirConfirmacao ? corpo.senhaConfirmacao : undefined));
   const nome = texto(corpo.nome, 120);
   const email = texto(corpo.email, 160).toLowerCase();
+  campos.push(...conferirSenhaNova(corpo.senha, exigirConfirmacao ? corpo.senhaConfirmacao : undefined, 'senha', 'senhaConfirmacao', { papel, documento: digitos, nome, email }));
   if (!nome) campos.push({ campo: 'nome', mensagem: 'Campo obrigatório: Nome' });
   if (!EMAIL_RE.test(email)) campos.push({ campo: 'email', mensagem: 'Informe um e-mail válido.' });
   return { digitos, nome, email, campos };
@@ -180,14 +181,14 @@ export default [
       const token = typeof c.token === 'string' ? c.token : '';
       const invalido = () => falha(400, 'token_invalido', 'Link inválido ou vencido. Peça um novo.');
       if (!token || token.length > 200) throw invalido();
-      const campos = conferirSenhaNova(c.senha, c.senhaConfirmacao);
       const h = hashToken(token);
       const { linhas } = await ctx.banco.executar(
-        `SELECT t.usuario_id, u.documento FROM tokens_redefinicao t JOIN usuarios u ON u.id = t.usuario_id
+        `SELECT t.usuario_id, u.documento, u.papel, u.nome, u.email FROM tokens_redefinicao t JOIN usuarios u ON u.id = t.usuario_id
          WHERE t.token_hash = ? AND t.usado_em IS NULL AND t.expira_em > ?`,
         [h, ctx.agora.toISOString()],
       );
       if (!linhas[0]) throw invalido();
+      const campos = conferirSenhaNova(c.senha, c.senhaConfirmacao, 'senha', 'senhaConfirmacao', linhas[0]);
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       const usuarioId = linhas[0].usuario_id;
       const senhaHash = await hashSenha(c.senha);

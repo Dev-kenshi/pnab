@@ -138,7 +138,7 @@ export async function renderCriarConta(ctx) {
     if (organizacao && !organizacao.input.value) falhas.push({ campo: 'organizacao', mensagem: 'Escolha a organização.' });
     if (!campos.nome.input.value.trim()) falhas.push({ campo: 'nome', mensagem: 'Campo obrigatório: Nome' });
     if (!campos.email.input.value.trim()) falhas.push({ campo: 'email', mensagem: 'Campo obrigatório: E-mail' });
-    const msgSenha = validarSenha(campos.senha.input.value);
+    const msgSenha = validarSenha(campos.senha.input.value, { documento: documentoPendente, nome: campos.nome.input.value, email: campos.email.input.value });
     if (msgSenha) falhas.push({ campo: 'senha', mensagem: msgSenha });
     else if (campos.senha.input.value !== campos.confirmacao.input.value) falhas.push({ campo: 'senhaConfirmacao', mensagem: 'A confirmação não confere com a senha.' });
     if (falhas.length) { mostrarErrosDaApi(falhas, mapa); return; }

@@ -60,7 +60,7 @@ export default [
       if (!(await verificarSenha(typeof c.senhaAtual === 'string' ? c.senhaAtual : '', ctx.usuario.senha_hash))) {
         throw falha(400, 'senha_atual_incorreta', 'A senha atual não confere.');
       }
-      const campos = conferirSenhaNova(c.novaSenha, c.novaSenhaConfirmacao, 'novaSenha', 'novaSenhaConfirmacao');
+      const campos = conferirSenhaNova(c.novaSenha, c.novaSenhaConfirmacao, 'novaSenha', 'novaSenhaConfirmacao', ctx.usuario);
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       const senhaHash = await hashSenha(c.novaSenha);
       await ctx.banco.executar('UPDATE usuarios SET senha_hash = ? WHERE id = ?', [senhaHash, ctx.usuario.id]);

@@ -86,7 +86,7 @@ export async function renderConta(ctx) {
     ev.preventDefault();
     limparErros(formSenha); msgSenha.hidden = true;
     if (!s.atual.input.value) { mostrarErro(s.atual.erro, 'Informe a senha atual.'); return; }
-    const m = validarSenha(s.nova.input.value);
+    const m = validarSenha(s.nova.input.value, usuario);
     if (m) { mostrarErro(s.nova.erro, m); return; }
     if (s.nova.input.value !== s.conf.input.value) { mostrarErro(s.conf.erro, 'A confirmação não confere com a nova senha.'); return; }
     alterar.disabled = true;

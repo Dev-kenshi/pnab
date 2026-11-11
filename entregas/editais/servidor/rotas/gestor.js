@@ -241,7 +241,7 @@ export default [
   {
     metodo: 'POST', caminho: '/api/gestor/avaliadores', papel: 'gestor',
     fn: async ctx => {
-      const { digitos, nome, email, campos } = validarDadosConta(ctx.corpo, { documentoComoCampo: true });
+      const { digitos, nome, email, campos } = validarDadosConta(ctx.corpo, { documentoComoCampo: true, papel: 'avaliador' });
       if (campos.length) throw falha(400, 'validacao', 'Confira os campos destacados.', campos);
       if (await documentoExiste(ctx.banco, digitos)) throw falha(409, 'documento_existente', 'Já existe uma conta com esse documento.');
       const id = await inserirUsuario(ctx.banco, { organizacaoId: ctx.usuario.organizacao_id, papel: 'avaliador', nome, documento: digitos, email, senha: ctx.corpo.senha, agora: ctx.agora });

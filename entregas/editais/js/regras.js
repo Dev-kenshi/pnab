@@ -322,9 +322,52 @@ export function gerarProtocolo(ano, sequencia) {
   return `TEB-${ano}-${String(sequencia).padStart(6, '0')}`;
 }
 
-export function validarSenha(senha) {
-  if (typeof senha !== 'string' || senha.length < 8) return 'A senha precisa ter ao menos 8 caracteres.';
-  if (senha.length > 200) return 'A senha pode ter no máximo 200 caracteres.';
+// Política de senha segundo o NIST SP 800-63B: comprimento, lista de senhas comuns e dados da própria conta.
+// Sem regra de composição obrigatória (maiúscula, símbolo), que o NIST desaconselha.
+export const SENHA_MINIMA = 10;
+export const SENHA_MINIMA_EQUIPE = 12;
+export const SENHA_MAXIMA = 128;
+export const PAPEIS_EQUIPE = ['gestor', 'avaliador', 'plataforma'];
+
+// Senhas e raízes muito usadas em vazamentos, em português e inglês. Comparação sem acento e sem caixa.
+const SENHAS_COMUNS = [
+  '123456', '1234567', '12345678', '123456789', '1234567890', '12345678910', '0123456789', '987654321', '9876543210',
+  '111111', '000000', '123123', '654321', '102030', '10203040', '1020304050', '147258369', '159753', '123321',
+  'senha', 'senha123', 'senha1234', 'senha12345', 'minhasenha', 'mudar123', 'trocar123', 'admin', 'admin123', 'administrador',
+  'password', 'passw0rd', 'qwerty', 'qwertyuiop', 'asdfghjkl', 'zxcvbnm', 'abc123', 'abcdef', 'abcdefgh', 'iloveyou', 'letmein',
+  'welcome', 'monkey', 'dragon', 'master', 'sunshine', 'princess', 'football', 'baseball', 'superman', 'batman', 'trustno1',
+  'brasil', 'brazil', 'flamengo', 'corinthians', 'palmeiras', 'saopaulo', 'vasco', 'gremio', 'cruzeiro', 'bahia', 'vitoria',
+  'jesus', 'deusefiel', 'amor', 'teamo', 'familia', 'felicidade', 'cultura', 'edital', 'editais', 'teb', 'sistemateb',
+  'sistemaintegrado', 'feiradesantana', 'aldirblanc', 'pnab', 'gestor', 'avaliador', 'proponente', 'plataforma', 'usuario',
+];
+
+function normalizar(texto) {
+  return String(texto ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+function sequenciaSimples(s) {
+  if (/^(.)\1+$/.test(s)) return true;
+  const sobe = '0123456789abcdefghijklmnopqrstuvwxyz', desce = [...sobe].reverse().join('');
+  return s.length >= 6 && (sobe.includes(s) || desce.includes(s));
+}
+
+// contexto: { papel, documento, nome, email }. Devolve a mensagem de erro ou null.
+export function validarSenha(senha, contexto = {}) {
+  const minima = PAPEIS_EQUIPE.includes(contexto?.papel) ? SENHA_MINIMA_EQUIPE : SENHA_MINIMA;
+  if (typeof senha !== 'string' || [...senha].length < minima) return `A senha precisa ter ao menos ${minima} caracteres.`;
+  if ([...senha].length > SENHA_MAXIMA) return `A senha pode ter no máximo ${SENHA_MAXIMA} caracteres.`;
+  const n = normalizar(senha);
+  const nucleo = n.replace(/[^a-z0-9]/g, '');
+  const semNumeros = nucleo.replace(/[0-9]+$/, '').replace(/^[0-9]+/, '');
+  if (sequenciaSimples(nucleo) || SENHAS_COMUNS.includes(nucleo) || SENHAS_COMUNS.includes(semNumeros) || new Set(n).size < 4) {
+    return 'Essa senha é muito comum ou fácil de adivinhar. Use uma frase com palavras que só você conhece.';
+  }
+  const doc = somenteDigitos(contexto?.documento);
+  if (doc.length >= 6 && n.replace(/\D/g, '').includes(doc.slice(0, 6))) return 'A senha não pode conter o seu CPF ou CNPJ.';
+  const local = normalizar(String(contexto?.email ?? '').split('@')[0]).replace(/[^a-z0-9]/g, '');
+  if (local.length >= 4 && nucleo.includes(local)) return 'A senha não pode conter o seu e-mail.';
+  const primeiroNome = normalizar(contexto?.nome).split(/[^a-z0-9]+/).find(Boolean) || '';
+  if (primeiroNome.length >= 4 && nucleo.includes(primeiroNome)) return 'A senha não pode conter o seu nome.';
   return null;
 }
 
