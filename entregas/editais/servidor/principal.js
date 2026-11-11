@@ -10,6 +10,7 @@
 //                                                 restaura num banco e numa pasta NOVOS (veja docs/backups.md)
 // Variáveis em .env.example. Nenhum segredo fica no código.
 import { existsSync } from 'node:fs';
+import { rm } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -109,11 +110,18 @@ async function restaurarComando(chaveDestino, nome) {
   const alvo = caminho(env.TEB_RESTAURAR_BANCO || 'servidor/dados/restaurado.sqlite');
   const pastaAnexos = caminho(env.TEB_RESTAURAR_ANEXOS || 'servidor/dados/anexos-restaurados');
   if (existsSync(alvo)) sair(`${alvo} já existe. A restauração nunca sobrescreve. Apague ou escolha outro TEB_RESTAURAR_BANCO.`);
-  const r = await restaurar({
-    destino, chave: cfg.chave, nome, pastaAnexos, pastaTemp: cfg.pastaTemp,
-    abrirDestinoBanco: () => abrirBanco({ caminho: alvo }),
-    log: m => console.log(`[restaurar] ${m}`),
-  });
+  let r;
+  try {
+    r = await restaurar({
+      destino, chave: cfg.chave, nome, pastaAnexos, pastaTemp: cfg.pastaTemp,
+      abrirDestinoBanco: () => abrirBanco({ caminho: alvo }),
+      log: m => console.log(`[restaurar] ${m}`),
+    });
+  } catch (e) {
+    // Restauração pela metade não fica no disco: o banco novo é apagado para a próxima tentativa.
+    for (const sufixo of ['', '-wal', '-shm']) await rm(`${alvo}${sufixo}`, { force: true });
+    throw new Error(`${e.message} O banco restaurado pela metade foi apagado. Anexos já gravados em ${pastaAnexos} são reaproveitados na próxima tentativa.`);
+  }
   console.log(`Restaurado ${r.backup} (criado em ${r.criadoEm}) em ${alvo}. Anexos em ${pastaAnexos}.`);
   console.log('Confira, depois aponte TEB_BANCO e TEB_ANEXOS para esses caminhos e suba o servidor.');
 }
