@@ -1,6 +1,6 @@
-REPROVADO
+REPROVADO (rodada 3: falha F7, teto absurdo dá HTTP 500)
 
-# Testes: Sistema Integrado TEB (editais), rodada 2
+# Testes: Sistema Integrado TEB (editais), rodadas 1 a 3
 
 Testador: segunda opinião. Data: 07/11/2026.
 
@@ -75,3 +75,69 @@ Servidor real, porta 4406 (`r2-real.mjs`), tudo pela tela:
 - Também ficaram as pastas `tmp-VMFw`, `tmp2` e `tmp3` e os scripts antigos da rodada 1.
 - Scripts desta rodada em `trabalho/editais/`: `r2-api.mjs`, `r2-demo.mjs`, `r2-real.mjs`.
 - Servidores da rodada 1 (portas 4300, 4301, 4310) não foram verificados nem encerrados por mim nesta rodada.
+
+---
+
+# Rodada 3 (última)
+
+Testador: segunda opinião. Data: 11/11/2026.
+
+**Veredito: REPROVADA.** Motivo único: F7, teto de edital muito grande dá erro 500 no servidor. F1 a F6 estão corrigidas. Todo o resto passou.
+
+## Portões refeitos
+- `node scripts/portoes/portao-3.mjs entregas/editais`: APROVADO.
+- `node scripts/portoes/portao-4.mjs entregas/editais --criterios trabalho/editais/criterios.json --telas trabalho/editais/telas`: APROVADO. Layout em 4 larguras e C1 a C12 ok.
+- `cd entregas/editais && npm test`: 102 testes, 102 passam.
+
+## F1 a F6
+- **F6 (401 anônimo): CORRIGIDA.** `GET /api/sessao` sem cookie dá 200 `{"usuario":null}`. No navegador (`r3-testador*.mjs`, servidor real, portas 4500 a 4520), abri `/`, `#/login`, `#/criar-conta`, `#/esqueci-senha`, `#/painel`, `#/gestor`, `#/avaliador`, `#/plataforma`, `#/inscricao/novo?edital=x`, `#/redefinir?token=zzz` e `#/conta` sem sessão, em 1280 e 360 px. Console limpo em todos. Rotas protegidas caem em `#/login`. As APIs protegidas seguem dando 401 (correto).
+- **F1 (logo), F3 (seletores), F4 e F5:** conferidos de novo nas capturas e nas telas do gestor em 1280 e 360 px. Logo carrega, sem 404, seletores sem corte.
+- **F2 (centavos e teto):** na tela, campo com `step=0.01`. Valores acima de R$ 10.000.000,00 por item mostram "Valor do item acima do máximo de R$ 10.000.000,00." e `aria-invalid`. 5000.01 mostra R$ 5.000,01. -3 mostra total R$ 0,00 e "não pode ser negativo". Edital criado pela tela com teto 10000 foi criado uma vez só com clique duplo. Item de R$ 10.000,00 no teto de R$ 10.000,00 enviou sem alerta.
+
+## Falhas novas
+
+### Média
+**F7. Teto de edital acima de 9e15 reais dá HTTP 500 (e 1e20 é aceito).**
+- Fez: `POST /api/gestor/editais` como gestor, com teto 1e16, 1e18 e 1e20 (`r3-ataque.mjs`, bloco "edital teto").
+- Esperava: 400 com mensagem de teto inválido ou acima do máximo, como já existe para o valor do item (R$ 10.000.000,00).
+- Aconteceu: 1e12 e 9e15 dão 201. 1e16 e 1e18 dão **500**. 1e20 dá 201 (aceita número absurdo). Infinity dá 400. O servidor não caiu. A tela do gestor envia o mesmo valor, então chega ao mesmo erro (não conferi a mensagem na tela).
+- Arquivo provável: `entregas/editais/js/regras.js` função `erroTeto` (linha 127, sem limite máximo) e `servidor/rotas/gestor.js` linha 30 a 37 (teto vai ao SQLite como inteiro em centavos, estoura acima de 2^63). Correção: limite máximo em `erroTeto`.
+
+## Regressão pela tela (vista acontecer)
+Servidor real, tudo pela UI, `r3-testador3.mjs` (1280 px) e `r3-360.mjs` (360 px):
+- Plataforma cria organização e gestor. Gestor cria avaliador e edital (clique duplo, uma linha) e abre.
+- Proponente cria conta (clique duplo), preenche inscrição com título `<b>"x"</b> & ç`, anexa PDF, salva rascunho, recarrega e o título volta. Envia com clique duplo: protocolo `TEB-2026-000001`, sem erro.
+- Gestor atribui avaliador. Avaliador lança nota 11 (recusada: "Nota acima do máximo de 10,0"), depois 8, envia com clique duplo: "Avaliação enviada. Nota geral: 8,0".
+- Gestor encerra, define resultado e publica: "Resultado publicado em 11/11/2026. Prazo de recurso até 26/11/2026." Proponente vê as notas e o parecer.
+- Recurso vazio recusado. Recurso com texto e clique duplo: um só, "Em análise". Gestor sem parecer recebe "Campo obrigatório: Parecer". Com parecer: "Deferido".
+- Sair volta ao login. Anexo falso (texto com nome .pdf): o servidor recusa com 415 e a tela mostra "Há 1 ponto para corrigir antes de enviar. Envie um arquivo PDF." O título fica preservado. .txt é recusado já na tela.
+- A faixa de modo demonstração não aparece no servidor real.
+- Console: só aparecem os 400 e 415 que eu provoquei de propósito (nota 11, parecer vazio, PDF falso). Sem erro inesperado.
+- 360 px: capturas em `telas-r3u/` e `telas-r3w/` olhadas. Sem rolagem horizontal, sem texto cortado, mesmo com nome de 300 caracteres. Erros do cadastro e do envio legíveis.
+- Só teclado: Tab percorre seletor de organização, Inscrever-se, links e sanfona do painel, na ordem lógica.
+- Rotas de gestor, avaliador e plataforma acessadas por proponente voltam ao `#/painel`.
+
+## Ataques via API (`r3-ataque.mjs`, duas organizações)
+- Entre organizações (proponente, gestor e avaliador de B contra dados de A): inscrição, anexo, atribuição, resultado, edital, recurso e avaliação dão 404. Lista do gestor B não traz o protocolo de A.
+- Papéis: proponente, avaliador, gestor e plataforma recebem 403 nas rotas dos outros. Anônimo recebe 401.
+- Entradas: documento de 200 mil caracteres 400, JSON inválido 400, corpo de 5 MB 413, nome de 1 MB na conta (aceito, ver melhoria), título de 100 mil caracteres cortado em 200. Nome com `<script>` é guardado como texto.
+- Envio duplo simultâneo: 200 e 409. Seis envios paralelos: seis protocolos únicos.
+- Anexo vazio 400, 11 MB 413, nome com `../` e quebra de linha aceito e sanitizado, chave inexistente 404.
+- Login: bloqueio com 429 após 5 erros seguidos (S4).
+- Cabeçalhos: CSP, nosniff, frame DENY e referrer ok. `/servidor/app.js`, `/.env` e `/..%2fpackage.json` dão 404.
+- Quantidade negativa ou zero é recusada. Quantidade 1e9 com valor 1e9 dá 400 de teto.
+
+## Melhorias opcionais (não reprovam)
+- Orçamento com mais de 200 itens: o servidor corta em silêncio (10000 itens enviados, 200 gravados, envio 200). Melhor recusar com mensagem.
+- Nome de 1 MB na criação de conta retorna 201. Convém limitar o tamanho.
+- Validações do avaliador e do gestor (nota acima do máximo, parecer vazio) vão ao servidor e aparecem como 400 no console do navegador. Validar antes no cliente deixaria o console limpo.
+- Valor 0.005 digitado mostra R$ 0,01 sem erro (arredonda no cliente).
+- O seletor `[data-campo='anexo']` da spec só existe nos dados de demonstração. No servidor real o campo se chama `extra-<rótulo>` (ex.: `extra-plano-em-pdf`). Coerente com editais montados pelo gestor, mas difere da spec.
+- Login aceita o parâmetro `organizacao` de outra org e abre a sessão na org verdadeira do usuário. Sem vazamento.
+
+## Limpeza
+- Servidores subidos por mim (portas 4500, 4510 e 4520): encerrados com `.kill()` em `finally`. Conferi com `netstat -ano | grep LISTENING | grep :45xx`: nenhuma porta 45xx escutando. (Durante uma rodada longa a 4500 estava ativa e depois sumiu.)
+- Servidores antigos 4300, 4301, 4310 e 4321: nenhum escutando. Não mexi neles.
+- Bancos e anexos de teste em `trabalho/editais/tmp-r3/` (`r3*.sqlite`, `anexos-*`, `saida-*.txt`). Chaves geradas na hora, senhas só de teste. Nada gravado fora de `trabalho/editais/`. Pastas antigas intactas.
+- Scripts: `r3-real.mjs` (rascunho do pedido), `r3-testador.mjs`, `r3-testador2.mjs`, `r3-testador3.mjs`, `r3-360.mjs`, `r3-ataque.mjs`. Capturas em `telas-r3`, `telas-r3t`, `telas-r3u`, `telas-r3v`, `telas-r3w`.
+- Sem commit nem push.
