@@ -1,4 +1,4 @@
-REPROVADO (rodada 3: falha F7, teto absurdo dá HTTP 500)
+APROVADO (rodada 4: F7 corrigida)
 
 # Testes: Sistema Integrado TEB (editais), rodadas 1 a 3
 
@@ -141,3 +141,49 @@ Servidor real, tudo pela UI, `r3-testador3.mjs` (1280 px) e `r3-360.mjs` (360 px
 - Bancos e anexos de teste em `trabalho/editais/tmp-r3/` (`r3*.sqlite`, `anexos-*`, `saida-*.txt`). Chaves geradas na hora, senhas só de teste. Nada gravado fora de `trabalho/editais/`. Pastas antigas intactas.
 - Scripts: `r3-real.mjs` (rascunho do pedido), `r3-testador.mjs`, `r3-testador2.mjs`, `r3-testador3.mjs`, `r3-360.mjs`, `r3-ataque.mjs`. Capturas em `telas-r3`, `telas-r3t`, `telas-r3u`, `telas-r3v`, `telas-r3w`.
 - Sem commit nem push.
+
+# Rodada 4
+
+Testador: segunda opinião. Data: 11/11/2026.
+
+**Veredito: APROVADA.** A F7 está corrigida no servidor, na tela real e no modo demonstração. Nenhuma falha nova.
+
+## Portões refeitos
+- `cd entregas/editais && npm test`: 104 testes, 104 passam, 0 falham.
+- `node scripts/portoes/portao-3.mjs entregas/editais`: "ok npm run test: passou", APROVADO (45 arquivos).
+- `node scripts/portoes/portao-4.mjs entregas/editais --criterios trabalho/editais/criterios.json --telas trabalho/editais/telas`: layout ok em 1440, 1024, 768 e 390 px, C1 a C12 ok, APROVADO.
+
+## F7 (teto de edital)
+Script `r4-ataque-f7.mjs`, servidor real na porta 4601, gestor logado, POST e PUT. Saída em `tmp-r4/saida-f7.txt`. O teto é em centavos, máximo 1000000000.
+- 201 (PUT 200): 999999999, 1000000000 e a string "1e9".
+- 400 com "Teto acima do máximo de R$ 10.000.000,00.": 1e12, 1000000001, 9e15, 1e16, 1e18, 1e20, "1e16" e "1000000001".
+- 400 "Teto inválido...": "Infinity", "-Infinity", "NaN", string de 100 mil dígitos, string "1" seguida de 400 zeros, 1.5, true, objeto.
+- 400: negativo (-1 e -1e20), zero, null e vazio.
+- JSON bruto: 1e400, -1e400 e 123456789012345678901234567890 dão 400. Infinity e NaN sem aspas dão 400 "não é um JSON válido".
+- Nenhum 500. Servidor vivo depois do ataque. Log do servidor sem erro.
+- Única divergência: teto `[5]` (lista com um número) é aceito, POST 201 e PUT 200, porque `Number([5])` vale 5. Valor dentro do limite, sem 500. Entra nas melhorias.
+
+## F7 pela tela
+- Servidor real (`r4-ui-real.mjs`, porta 4602), teto 100000000000000 reais, em 1280 e 360 px: aparece "Teto acima do máximo de R$ 10.000.000,00." dentro do bloco do campo, com `aria-invalid` e foco no campo, mais o aviso "Confira os campos destacados.". Fica no formulário. Sem rolagem horizontal em 360 px. Capturas `telas-r4/real-teto-1280.png` e `real-teto-360.png` olhadas: texto inteiro, sem corte.
+- Teto R$ 10.000.000,00 cria o edital. Na edição, 10.000.000,01 mostra a mesma mensagem.
+- Modo demonstração (`r4-ui-demo.mjs`, servidor estático), em 1280 e 360 px: mesma mensagem, `aria-invalid`, sem rolagem horizontal, limite de R$ 10.000.000,00 cria o edital. Console e rede sem nenhum erro. Capturas `demo-teto-1280.png` e `demo-teto-360.png`.
+
+## Regressão pela tela (servidor real, porta 4602)
+Tudo pela interface, em `r4-ui-real.mjs`:
+- Gestor cria avaliador, cria edital, abre. Proponente cria conta e envia inscrição (protocolo TEB-2026-000001, com orçamento e meta).
+- Gestor atribui avaliador. Avaliador lança nota 8 e envia: "Nota geral: 8,0".
+- Gestor encerra, define resultado e publica: "Resultado publicado em 11/11/2026. Prazo de recurso até 26/11/2026."
+- Proponente envia recurso: "Em análise". Gestor defere com parecer.
+- Console: só os três 400 que provoquei de propósito (POST com teto 1e14 reais em 1280 e 360 px, PUT com 10.000.000,01). Nenhum erro de JavaScript, nenhum 4xx ou 5xx inesperado.
+- Obs.: na primeira execução o script falhou por erro meu (recarga de rota com o mesmo hash). Corrigi o script, a entrega não mudou. Segunda execução limpa.
+
+## Melhorias opcionais (não reprovam)
+- Teto como lista, `[5]`, é aceito por coerção. Convém exigir número ou string.
+- As melhorias da rodada 3 seguem valendo: limite de 200 itens do orçamento cortado em silêncio, nome de 1 MB na conta, validar nota e parecer no cliente para evitar 400 no console.
+- O botão "Adicionar categoria" aparece cinza na captura 1280 do formulário. Parece estado de hover do mouse. Não investiguei.
+
+## Limpeza
+- Servidores subidos por mim (portas 4601 e 4602): encerrados com SIGTERM em `finally`. Servidor estático da demonstração fechado. Conferi com `ss -ltn`: nenhuma porta 46xx escutando.
+- Bancos e anexos em `trabalho/editais/tmp-r4/` (`f7.sqlite`, `ui.sqlite`, `anexos-*`, `saida-*.txt`). Chaves geradas na hora, senhas só de teste. Nada escrito fora de `trabalho/editais/`.
+- Scripts: `r4-lib.mjs`, `r4-ataque-f7.mjs`, `r4-ui-real.mjs`, `r4-ui-demo.mjs`. Capturas em `telas-r4/`.
+- Sem commit nem push. Entrega intacta.
