@@ -185,6 +185,12 @@ async function servir() {
   const servidor = createServer({ requestTimeout: 60000, headersTimeout: 20000 }, app);
   servidor.listen(porta, () => console.log(`Sistema Integrado TEB no ar na porta ${porta}. Banco: ${banco.tipo}. Anexos: ${anexos.tipo}.`));
   // No Replit publicado, o disco é refeito a cada publicação: anexos em disco se perdem.
+  // Com o R2 ligado, anexos que ficaram no disco não abrem mais: avisa para migrar.
+  if (anexos.tipo === 'r2') {
+    criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave }).listarIds()
+      .then(ids => { if (ids.length) console.warn(`[aviso] ${ids.length} anexos ainda estão no disco. Rode: node servidor/principal.js migrar-anexos`); })
+      .catch(() => {});
+  }
   if (env.REPL_ID && anexos.tipo === 'disco') {
     console.warn('[aviso] Replit com anexos em disco: eles somem a cada publicação. Configure TEB_R2_* (docs/backups.md) e rode migrar-anexos.');
   }
