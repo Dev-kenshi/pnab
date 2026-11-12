@@ -12,10 +12,10 @@ Atualizado em 12/11/2026. Junta o trabalho de todas as sessões e agentes. Valor
 | Backups cifrados em 3 destinos | Feita e na `main` | Testador: reprovou na rodada 1, aprovou na rodada 3 (`testes-backup.md`) |
 | Segurança: 100 validações e duplo teste | Feita e na `main` | Passada do construtor com mutação; passada do testador reprovou na rodada 1 e aprovou na rodada 2 (`testes-seguranca.md`) |
 | Commits feitos no PC (README, Pages, trava, login admin, exemplo) | Revisados, corrigidos e na `main` | Testador: reprovou na rodada 1 (5 falhas), aprovou na rodada 2 (`testes-pc.md`) |
-| Anexos no Cloudflare R2 | Feito no ramo `construcao` | **Aguarda a revisão do testador** antes de ir para a `main` |
+| Anexos no Cloudflare R2 | Feito e na `main` | Testador: reprovou na rodada 1 (listagem sem fim, backup sem banco, corpo cortado) e aprovou na rodada 2 |
 | Replit | Importado em endereço de desenvolvimento, não publicado | Relato da sessão do PC: 234 de 234 testes no Node 24 |
 
-Números atuais no ramo `construcao`: **269 testes, todos passando**; portão 3 aprovado; portão 4 aprovado (4 larguras, critérios C1 a C12).
+Números atuais na `main`: **272 testes, todos passando**; portão 3 aprovado; portão 4 aprovado (4 larguras, critérios C1 a C12).
 
 ## Quem fez o quê
 
@@ -45,22 +45,22 @@ Números atuais no ramo `construcao`: **269 testes, todos passando**; portão 3 
 | Backups | 3 | Aprovado |
 | Segurança, segunda passada | 2 | Aprovado |
 | Commits do PC | 2 | Aprovado |
-| Cloudflare R2 | 0 | **Pendente** |
+| Cloudflare R2 | 2 | Aprovado |
 
 ## O que falta (depende do usuário)
 
-1. **Revisão do R2 pelo testador** e merge na `main`.
-2. **Atualizar o Replit**, que está atrás da `main`: no Shell do Replit, rode `git pull`.
-3. **Chave dos anexos nos Secrets** (`TEB_CHAVE_ANEXOS`), com cópia no cofre de senhas. Não usar a chave gerada em arquivo pelo `iniciar-replit.sh`.
-4. **Criar o bucket R2** e o token, preencher as `TEB_R2_*` e rodar `node servidor/principal.js migrar-anexos` se já houver anexos no disco.
-5. **Banco no Turso**: criar o banco e preencher `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`. Depois, medir a velocidade no Replit.
-6. **Publicar** na Reserved VM e ligar o domínio próprio, com `TEB_HTTPS=1`, `TEB_CONFIAR_PROXY=1` e `TEB_URL_PUBLICA`.
-7. **Criar a conta da plataforma** com senha própria de 12 caracteres ou mais, por Secret.
-8. **Contas reais dos backups e do e-mail**: Google Drive, Backblaze B2, GitHub privado e Resend, com um backup, uma restauração e um esqueci-senha de ponta a ponta.
-9. **Confirmar o GitHub Pages.** No pedido original ele não devia ser ligado; o README já aponta para lá.
-10. **Melhorias opcionais registradas pelo testador**:
+1. **Atualizar o Replit**, que está atrás da `main`: no Shell do Replit, rode `git pull`.
+2. **Chave dos anexos nos Secrets** (`TEB_CHAVE_ANEXOS`), com cópia no cofre de senhas. Não usar a chave gerada em arquivo pelo `iniciar-replit.sh`.
+3. **Criar o bucket R2** e o token, preencher as `TEB_R2_*` e rodar `node servidor/principal.js migrar-anexos` se já houver anexos no disco.
+4. **Banco no Turso**: criar o banco e preencher `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`. Depois, medir a velocidade no Replit.
+5. **Publicar** na Reserved VM e ligar o domínio próprio, com `TEB_HTTPS=1`, `TEB_CONFIAR_PROXY=1` e `TEB_URL_PUBLICA`.
+6. **Criar a conta da plataforma** com senha própria de 12 caracteres ou mais, por Secret.
+7. **Contas reais dos backups e do e-mail**: Google Drive, Backblaze B2, GitHub privado e Resend, com um backup, uma restauração e um esqueci-senha de ponta a ponta.
+8. **Confirmar o GitHub Pages.** No pedido original ele não devia ser ligado; o README já aponta para lá.
+9. **Melhorias opcionais registradas pelo testador**:
     - exemplo no servidor real: aviso com HTTPS, seguir sem o exemplo se o CPF já existir, protocolo próprio e comando para removê-lo;
     - login de teste: texto que não é o apelido ainda gera um 400 no console;
     - trava de login sem tempo máximo de espera; limite de criação de conta conta também as recusadas;
     - backup: renovar a trava acima de 6 horas e repetir o envio ao B2 quando ele responder 5xx;
-    - verificação em duas etapas, troca da chave dos anexos e antivírus nos PDFs.
+    - verificação em duas etapas, troca da chave dos anexos e antivírus nos PDFs;
+    - R2: nunca foi chamado de verdade. Conferir no primeiro uso que o R2 aceita `If-None-Match: *` no envio (se recusar, todo envio dá 503).
