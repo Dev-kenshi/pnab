@@ -135,6 +135,12 @@ export function criarArmazemR2({ accountId, accessKeyId, secretAccessKey, bucket
     e.code = 'ARMAZEM_INDISPONIVEL';
     throw e;
   };
+  const indisponivel = mensagem => Object.assign(new Error(mensagem), { code: 'ARMAZEM_INDISPONIVEL' });
+  // Corpo cortado no meio também é indisponibilidade: a rota responde 503, não 500.
+  const lerCorpo = async (r, como, oQue) => {
+    try { return await r[como](); } catch { throw indisponivel(`R2 cortou a resposta ao ${oQue}.`); }
+  };
+  const MAX_PAGINAS = 10000;
 
   const gravarBruto = async (id, dados) => {
     // If-None-Match: * recusa sobrescrever um anexo que já existe, como o flag "wx" do disco.
@@ -145,7 +151,7 @@ export function criarArmazemR2({ accountId, accessKeyId, secretAccessKey, bucket
     const r = await pedir('GET', chaveObjeto(id));
     if (r.status === 404) { const e = new Error('Anexo não encontrado no R2.'); e.code = 'ENOENT'; throw e; }
     if (!r.ok) await falhou(r, 'ler o anexo');
-    return Buffer.from(await r.arrayBuffer());
+    return Buffer.from(await lerCorpo(r, 'arrayBuffer', 'ler o anexo'));
   };
   return {
     tipo: 'r2',
@@ -163,18 +169,28 @@ export function criarArmazemR2({ accountId, accessKeyId, secretAccessKey, bucket
     },
     async listarIds() {
       const ids = [];
-      let continuar = null;
+      const vistos = new Set();
+      let continuar = null, paginas = 0;
       do {
+        // Freio contra listagem sem fim: token repetido ou páginas demais param com erro.
+        if (++paginas > MAX_PAGINAS) throw indisponivel('R2 devolveu páginas demais ao listar os anexos.');
         const consulta = { 'list-type': '2', prefix: prefixo, 'max-keys': '1000', ...(continuar ? { 'continuation-token': continuar } : {}) };
         const r = await pedir('GET', '', { consulta });
         if (!r.ok) await falhou(r, 'listar os anexos');
-        const xml = await r.text();
+        const xml = await lerCorpo(r, 'text', 'listar os anexos');
         for (const m of xml.matchAll(/<Key>([^<]+)<\/Key>/g)) {
           const nome = m[1].replace(/&amp;/g, '&');
           const id = nome.startsWith(prefixo) ? ARQ_RE.exec(nome.slice(prefixo.length))?.[1] : null;
           if (id) ids.push(id);
         }
-        continuar = /<IsTruncated>true<\/IsTruncated>/.test(xml) ? (/<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null) : null;
+        if (/<IsTruncated>true<\/IsTruncated>/.test(xml)) {
+          continuar = /<NextContinuationToken>([^<]+)<\/NextContinuationToken>/.exec(xml)?.[1] ?? null;
+          if (!continuar) throw indisponivel('R2 indicou mais páginas sem token de continuação ao listar os anexos.');
+          if (vistos.has(continuar)) throw indisponivel('R2 repetiu o token de continuação ao listar os anexos.');
+          vistos.add(continuar);
+        } else {
+          continuar = null;
+        }
       } while (continuar);
       return ids.sort();
     },
