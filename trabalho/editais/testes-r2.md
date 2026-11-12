@@ -1,4 +1,4 @@
-REPROVADO
+APROVADO (rodada 2)
 
 # Revisão do adaptador Cloudflare R2 (ramo `construcao`, commit 78edb02)
 
@@ -66,3 +66,32 @@ Duas falhas. A SigV4 está correta. O resto do adaptador se comportou bem nos at
 - Nada fora de `trabalho/editais/`. `git status` sem alterações. Pastas temporárias dos testes apagadas.
 - Scripts desta revisão (ignorados pelo git): `r4-r2-ref.mjs`, `r4-r2-sigv4.mjs`, `r4-r2-ataque.mjs`, `r4-r2-infinito.mjs`, `r4-r2-timeout.mjs`, `r4-r2-rota.mjs`.
 - Comando: `node trabalho/editais/r4-r2-<nome>.mjs`, da raiz do repositório.
+
+# Rodada 2
+
+Veredito: APROVADO. Commits b1eefc4, 04ce750, 28e7331 e 0eb5ef8 (HEAD 0eb5ef8).
+
+## Portões (rodados de novo)
+- `cd entregas/editais && npm test`: 272 passam, 0 falham.
+- Portão 3: APROVADO. Portão 4: APROVADO, C1 a C12.
+- `git status` limpo. Nada escrito fora de `trabalho/editais/`.
+
+## Falhas da rodada 1
+1. Token de continuação repetido (alta): corrigida. `node trabalho/editais/r4-r2-infinito.mjs` agora lança `ARMAZEM_INDISPONIVEL` após 2 páginas ("R2 repetiu o token de continuação"). Antes eram 20.001 páginas.
+2. Backup sem banco com R2 fora na listagem (média): corrigida. Com listagem 500, o relatório traz `banco: true`, `ok: false` e o erro "não foi possível listar os anexos: R2 respondeu 500 ao listar os anexos." O banco foi enviado. Com um anexo ilegível o comportamento seguiu igual, sem sobra na pasta temporária.
+3. Corpo cortado vira 500 (baixa): corrigida. Na rota, o download com corpo cortado agora dá 503 `armazenamento_indisponivel`, sem segredo (`r4-r2-rota.mjs`).
+
+## Melhorias da rodada 1 que entraram
+- Truncada sem token agora lança erro (antes devolvia lista parcial em silêncio).
+- Aviso na subida: com R2 e 2 arquivos `.bin` no disco, imprime "[aviso] 2 anexos ainda estão no disco. Rode: node servidor/principal.js migrar-anexos". Sem `.bin` ou com pasta inexistente, não avisa e o servidor sobe normal. Arquivo que não é anexo (`lixo.txt`) é ignorado.
+
+## Regressões procuradas
+- `r4-r2-sigv4.mjs`: 294 combinações, 0 divergências.
+- `r4-r2-ataque.mjs`: ids maliciosos, segredo em erro, XML hostil, sobrescrita (412), migração com falha e repetida, variáveis com espaço. Tudo igual à rodada 1. Ajustei só o meu script, porque a listagem truncada sem token agora lança.
+- Timeout: 30 s com `ARMAZEM_INDISPONIVEL`.
+- Paginação legítima com tokens diferentes segue funcionando (testes do repositório).
+- Nenhuma regressão encontrada.
+
+## Opcionais que sobram
+- Token de continuação sem decodificar `&amp;`, `URIError` com `%` solto em `assinarSigV4`, array aceito como id e teste de assinatura circular em `r2.test.js`. Nenhum é alcançável pelo sistema.
+- Continua sem teste contra o R2 de verdade, e `If-None-Match: *` no PUT não foi visto aceito.
