@@ -221,7 +221,14 @@ export default [
       if (msg && bytes.length > regras.LIMITE_ANEXO) throw falha(413, 'arquivo_grande', msg);
       if (msg && bytes.length === 0) throw falha(400, 'validacao', msg, [{ campo: campo.chave, mensagem: msg }]);
       if (msg || bytes.subarray(0, 5).toString('latin1') !== '%PDF-') throw falha(415, 'tipo_invalido', 'Envie um arquivo PDF.');
-      const arquivoId = await ctx.anexos.gravar(bytes);
+      let arquivoId;
+      try { arquivoId = await ctx.anexos.gravar(bytes); } catch (e) {
+        if (e?.code === 'ARMAZEM_INDISPONIVEL') {
+          console.error('[anexos]', e.message);
+          throw falha(503, 'armazenamento_indisponivel', 'O envio de arquivos está fora do ar. Tente de novo em alguns minutos.');
+        }
+        throw e;
+      }
       const id = gerarId();
       const antigos = (await ctx.banco.executar('SELECT id, arquivo_id FROM anexos WHERE inscricao_id = ? AND chave = ? AND organizacao_id = ?', [insc.id, campo.chave, insc.organizacaoId])).linhas;
       await ctx.banco.transacao(async tx => {
@@ -249,7 +256,13 @@ export default [
       const pode = a && ((u.papel === 'proponente' && a.dono_id === u.id) || u.papel === 'gestor' || (u.papel === 'avaliador' && a.avaliador_id === u.id));
       if (!pode) throw falha(404, 'nao_encontrado', 'Anexo não encontrado.');
       let bytes;
-      try { bytes = await ctx.anexos.ler(a.arquivo_id); } catch { throw falha(500, 'anexo_corrompido', 'Não foi possível abrir o anexo.'); }
+      try { bytes = await ctx.anexos.ler(a.arquivo_id); } catch (e) {
+        if (e?.code === 'ARMAZEM_INDISPONIVEL') {
+          console.error('[anexos]', e.message);
+          throw falha(503, 'armazenamento_indisponivel', 'Os arquivos estão fora do ar. Tente de novo em alguns minutos.');
+        }
+        throw falha(500, 'anexo_corrompido', 'Não foi possível abrir o anexo.');
+      }
       const res = ctx.res;
       res.statusCode = 200;
       res.setHeader('Content-Type', 'application/pdf');
