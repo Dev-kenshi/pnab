@@ -142,6 +142,18 @@ Recurso só para teste. Sem a variável `TEB_PLATAFORMA_LOGIN`, nada muda.
 - **Antes de usar de verdade.** Apague `TEB_PLATAFORMA_LOGIN`. Um nome previsível como `admin` facilita a vida de quem tenta adivinhar senhas.
 - **Modo demonstração.** Não aceita usuário. Só CPF ou CNPJ válido.
 
+## Exemplo no servidor real (opcional, desligado por padrão)
+
+Recurso só para teste. Sem as variáveis, nada é criado.
+
+- **Para que serve.** Mostrar no servidor real as mesmas telas da demonstração: painel do proponente com contadores e linha do tempo, notas com parecer, recurso em análise, habilitação, área do gestor, área do avaliador e aviso em janela.
+- **Como ligar.** Coloque `TEB_SEMEAR_EXEMPLO=1` e a senha em `TEB_EXEMPLO_SENHA`, nos Secrets do Replit. A senha nunca vai para o código, para o `.env.example` nem para o Git. O comando `node servidor/principal.js semear-exemplo` faz o mesmo sem subir o servidor.
+- **O que cria.** A organização `exemplo-teste` ("Fundação Cultural Exemplo (teste)"), com gestor, avaliador e proponente marcados "(exemplo)" e e-mails `@teb.example`. Os CPFs são fictícios, válidos por dígito e diferentes dos reservados da demonstração. Ficam no README da raiz.
+- **Validações.** A senha passa pela mesma regra das contas reais (12 caracteres ou mais, nada comum, sem CPF, e-mail ou nome). A senha da demonstração é recusada. Senha guardada com scrypt. Senha inválida para a subida com a mensagem `[exemplo]`. O log mostra só os CPFs, nunca a senha.
+- **Idempotente.** Se a organização já existe, nada muda. Trocar a senha nos Secrets não troca a senha de contas que já existem.
+- **Isolamento.** O exemplo é uma organização separada. Quem é de outra organização não vê nada dele. A criação fica na auditoria (`exemplo_semeado`).
+- **Antes de usar de verdade.** Apague `TEB_SEMEAR_EXEMPLO` e `TEB_EXEMPLO_SENHA`. As contas já criadas continuam no banco: troque a senha delas ou apague o banco de teste.
+
 ## Pendências e riscos conhecidos
 
 - **E-mail real.** O adaptador Resend existe, mas nunca foi chamado de verdade, porque não há conta nem rede aqui. Sem configuração, o link de redefinição não chega a ninguém. A pessoa precisa pedir à equipe a troca de senha.

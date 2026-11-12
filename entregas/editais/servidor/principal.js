@@ -5,6 +5,7 @@
 //   node servidor/principal.js                    sobe o servidor
 //   node servidor/principal.js criar-plataforma   cria a conta da plataforma (se já existe, só avisa)
 //   node servidor/principal.js garantir-plataforma  o mesmo, para rodar a cada subida (Replit)
+//   node servidor/principal.js semear-exemplo     cria o exemplo de teste (TEB_EXEMPLO_SENHA), idempotente
 //   node servidor/principal.js backup             faz o backup cifrado nos destinos configurados
 //   node servidor/principal.js criar-pasta-drive  cria a pasta do backup no Google Drive e mostra o ID
 //   node servidor/principal.js restaurar <destino> [nome-do-backup]
@@ -24,7 +25,9 @@ import { lerChaveBackup } from './backup/cifra.js';
 import { destinosDoAmbiente, googleDrive } from './backup/destinos.js';
 import { fazerBackup, listarBackups, restaurar } from './backup/rotina.js';
 import { ipPadrao } from './seguranca.js';
+import * as regras from '../js/regras.js';
 import { garantirContaPlataforma, loginPlataformaDoAmbiente } from './conta-plataforma.js';
+import { semearExemplo } from './exemplo.js';
 
 const RAIZ = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const arquivoEnv = resolve(RAIZ, '.env');
@@ -52,6 +55,23 @@ async function criarPlataforma() {
   try {
     const r = await garantirContaPlataforma(banco, env);
     console.log(r.criada ? `${r.mensagem} Guarde TEB_PLATAFORMA_SENHA só nos Secrets, nunca no código.` : r.mensagem);
+  } finally {
+    await banco.fechar();
+  }
+}
+
+// Exemplo de teste. Imprime os CPFs criados, nunca a senha.
+function logExemplo(r, prefixo = '') {
+  console.log(`${prefixo}${r.criada ? 'Exemplo criado' : 'O exemplo já existe. Nada foi alterado'}: ${r.organizacao.nome} (${r.organizacao.slug}).`);
+  for (const c of r.contas) console.log(`${prefixo}  ${c.papel}: CPF ${regras.formatarDocumento(c.documento)} (${c.nome})`);
+  if (r.criada) console.log(`${prefixo}A senha das três contas é a de TEB_EXEMPLO_SENHA, guardada só nos Secrets.`);
+}
+
+async function semearExemploComando() {
+  if (!env.TEB_EXEMPLO_SENHA) sair('Defina TEB_EXEMPLO_SENHA (nos Secrets ou no .env local) para criar o exemplo. Nada foi criado.');
+  const banco = await abrir();
+  try {
+    logExemplo(await semearExemplo(banco, { senha: env.TEB_EXEMPLO_SENHA, agora: new Date(), ip: 'linha-de-comando' }));
   } finally {
     await banco.fechar();
   }
@@ -138,6 +158,11 @@ async function servir() {
   if (env.TEB_PLATAFORMA_SENHA) {
     try { console.log(`[plataforma] ${(await garantirContaPlataforma(banco, env, { ip: 'subida' })).mensagem}`); } catch (e) { await banco.fechar(); sair(`[plataforma] ${e.message}`); }
   }
+  // Exemplo de teste opcional. O disco do Replit publicado pode ser zerado a cada reinício, por isso roda na subida.
+  if (env.TEB_SEMEAR_EXEMPLO === '1') {
+    if (!env.TEB_EXEMPLO_SENHA) { await banco.fechar(); sair('[exemplo] TEB_SEMEAR_EXEMPLO=1 exige TEB_EXEMPLO_SENHA nos Secrets. Defina a senha ou apague TEB_SEMEAR_EXEMPLO.'); }
+    try { logExemplo(await semearExemplo(banco, { senha: env.TEB_EXEMPLO_SENHA, agora: new Date(), ip: 'subida' }), '[exemplo] '); } catch (e) { await banco.fechar(); sair(`[exemplo] ${e.message}`); }
+  }
   if (loginPlataforma) console.log(`[plataforma] Login de teste ligado: usuário "${loginPlataforma.usuario}". Desligue apagando TEB_PLATAFORMA_LOGIN.`);
   const anexos = criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave });
   const porta = Number(env.PORTA || 3000);
@@ -170,6 +195,7 @@ async function servir() {
 
 const comando = process.argv[2];
 if (comando === 'criar-plataforma' || comando === 'garantir-plataforma') await criarPlataforma().catch(e => sair(e.message));
+else if (comando === 'semear-exemplo') await semearExemploComando().catch(e => sair(e.message));
 else if (comando === 'backup') await backup().catch(e => sair(e.message));
 else if (comando === 'criar-pasta-drive') await criarPastaDrive().catch(e => sair(e.message));
 else if (comando === 'restaurar') await restaurarComando(process.argv[3], process.argv[4]).catch(e => sair(e.message));
