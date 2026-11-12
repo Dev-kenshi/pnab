@@ -111,7 +111,9 @@ export async function fazerBackup({ banco, anexos: armazem, pastaAnexos, chave, 
     await rm(plano);
     const bytesBanco = await readFile(cifrado);
     const fonte = fonteDeAnexos({ anexos: armazem, pastaAnexos });
-    const ids = await fonte.listarIds();
+    // Falha ao listar os anexos não impede o backup do banco: cada destino com anexos registra o erro.
+    let ids = [], erroLista = null;
+    try { ids = await fonte.listarIds(); } catch (e) { erroLista = `não foi possível listar os anexos: ${String(e?.message || e)}`; }
 
     for (const d of destinos) {
       const r = { destino: d.nome, ok: false, banco: false, bancoPulado: false, anexosEnviados: 0, anexosJaExistiam: 0, apagados: 0, erro: null };
@@ -143,6 +145,12 @@ export async function fazerBackup({ banco, anexos: armazem, pastaAnexos, chave, 
         // Nunca apaga o que acabou de enviar, mesmo com o relógio atrasado.
         const antigos = (await listarBackups(d)).filter(n => n !== relatorio.nomeBanco).slice(r.banco ? reter - 1 : reter);
         for (const nome of antigos) { await d.apagar(nome); r.apagados++; }
+        if (d.guardaAnexos && erroLista) {
+          // O banco foi; os anexos não. O destino fica com falha para o operador ver.
+          r.erro = erroLista;
+          log(`${d.nome}: banco ${r.bancoPulado ? 'pulado' : 'enviado'}, mas FALHOU nos anexos. ${erroLista}`);
+          continue;
+        }
         r.ok = true;
         log(`${d.nome}: ${r.bancoPulado ? `banco pulado (intervalo de ${d.intervaloDias} dias)` : 'banco enviado'}, ${r.anexosEnviados} anexos novos, ${r.anexosJaExistiam} já existiam, ${r.apagados} backups antigos apagados.`);
       } catch (e) {
