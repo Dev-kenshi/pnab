@@ -1,4 +1,4 @@
-REPROVADO
+APROVADO (rodada 2)
 
 # Testes dos 3 commits feitos no PC (35ba19b, 05d57f6, e615753)
 
@@ -103,3 +103,54 @@ Script `r4-pc-trava.mjs`, caso 3.
 - Capturas em `trabalho/editais/telas-r4/pc-*.png`. Ignoradas pelo git.
 - Bancos temporários `tmp-r4/seg/pc-*` apagados. Servidores de teste encerrados. A cópia do commit anterior no scratchpad foi apagada.
 - `git status` limpo. Sem commit nem push. Nada da entrega foi editado.
+
+# Rodada 2
+
+Commits revisados: 80e63a7, afa2ce3, b0ce165 (correções) e 735551c (exemplo no servidor real). Ramo `construcao`, topo b0ce165.
+
+## Portões (rodados de novo)
+
+- `cd entregas/editais && npm test`: 260 testes, 260 passam.
+- Portão 3: APROVADO (60 arquivos).
+- Portão 4: APROVADO.
+- Scripts `r4-pc-api.mjs`, `r4-pc-cfg.mjs`, `r4-pc-cfg2.mjs`, `r4-pc-trava.mjs`, `r4-pc-tempo.mjs`, `r4-pc-ui.mjs` rodados de novo. Os 5 "FALHA" de `r4-pc-api.mjs` (D0 e E4) são do próprio script: ele gasta os 5 erros do documento antes do passo. Já eram assim na rodada 1 e o servidor se comportou certo.
+
+## As 5 falhas da rodada 1
+
+1. **Console com recurso desligado: corrigida.** Servidor real sem `TEB_PLATAFORMA_LOGIN`, digitando `admin`, `ADMIN`, `root`, `12345`, `Admin!` e vazio: erro na tela, zero erros de console, zero pedidos 400. Script: `node trabalho/editais/r4-pc-ui.mjs`, bloco "sem o recurso".
+2. **Rótulo: corrigido.** Sem o recurso o rótulo é "CPF ou CNPJ". Com o recurso é "CPF, CNPJ ou usuário". `/modo.json` traz só `loginUsuario` true ou false.
+3. **Trava do backup: corrigida.** `r4-pc-trava.mjs` caso 2: com a sobra impossível de apagar, o erro sobe e a trava não fica. Casos 1a a 1i e a folga de relógio (3) seguem certos. `mkdtemp` agora está protegido (visto no código, não provoquei).
+4. **Apelido em conta que não é da plataforma: corrigida.** `r4-pc-cfg2.mjs`: `admin` com a senha do gestor deu 401, como conta inexistente. A resposta com `{"documento":"admin"}` em `/api/acesso/documento` ainda diz `existe: true` nesse caso. Só quem configurou o apelido vê isso. Sem impacto.
+5. **500 com `{"toString":"x"}`: corrigido.** Nenhum 500 em `/documento`, `/entrar`, `/esqueci-senha` e `/criar-conta` com null, número, booleano, array e objeto.
+
+Tempo de resposta do apelido, do CPF da plataforma e de CPF inexistente segue igual (cerca de 220 ms na primeira tentativa errada).
+
+## Exemplo no servidor real (735551c)
+
+Scripts `r4-pc-exemplo.mjs`, `r4-pc-exemplo2.mjs`, `r4-pc-exemplo3.mjs`, `r4-pc-exemplo4.mjs`.
+
+- **Vem desligado?** Sim. Sem variáveis, só com a senha, e com `TEB_SEMEAR_EXEMPLO` igual a `true`, `0`, ` 1` e `yes`: nenhuma organização criada e nenhum `[exemplo]` no log. Só o valor exato `1` liga.
+- **Parece real?** Não. Organização "Fundação Cultural Exemplo (teste)". Contas com "(exemplo)" no nome e e-mail `@teb.example`. Editais, projetos e aviso trazem "(exemplo)" ou "exemplo fictício". Telefones começam com `00`. Nas telas, o painel do proponente mostra o nome da organização com "(teste)". Captura `telas-r4/pc-ex-proponente.png` lida, sem texto cortado nem sobreposição, sem rolagem horizontal em 390 px. Console limpo nas 4 telas (gestor, avaliador, proponente em 1280 e 390).
+- **Política de senha.** A subida recusa e não cria nada com: ausente, `curta`, 11 caracteres, `Exemplo#2026`, `password1234`, senha com o CPF, com o nome, com o e-mail, 12 espaços e `aaaaaaaaaaaaaaaa`. Saída 1 e a mensagem diz qual conta recusou. A senha não aparece no log, na saída do comando nem na auditoria. Senha guardada com scrypt.
+- **Documentos reservados.** Os 3 CPFs são válidos e fora da lista da demonstração. A conta e a senha da demonstração não entram no servidor real (401).
+- **Ligado sem querer?** Exige `TEB_SEMEAR_EXEMPLO=1` e a senha. O `.env.example` vem com as duas vazias. Não há aviso extra quando `TEB_HTTPS=1`. Ver melhoria 1.
+- **Roda de novo sem duplicar?** Sim. Segunda subida com outra senha: 1 organização, 3 usuários, 2 editais, 4 inscrições, 1 recurso, 1 aviso e 1 registro `exemplo_semeado`. A senha nova não troca a das contas existentes. O comando `semear-exemplo` rodou duas vezes com código 0. Três comandos ao mesmo tempo: 1 organização, 3 usuários, 4 inscrições.
+- **Vaza entre organizações?** Não. Com uma organização B real: o gestor B e o proponente B veem listas vazias. Lêem as 4 inscrições, os 2 ids `exemplo-*` e o edital do exemplo e recebem 403 ou 404. O gestor B não altera resultado, não atribui avaliador, não decide o recurso, não edita nem encerra o edital do exemplo (403 ou 404). O gestor do exemplo não vê nada de B. A plataforma não lê inscrição do exemplo (403). O avaliador não vê CPF nem e-mail do proponente. Sem login, a inscrição dá 401.
+- **CPF do exemplo já ocupado.** Conta real criada antes com o CPF 86357924679, depois a subida com o flag: o servidor recusa, sai com código 1 e diz "Já existe uma conta com o CPF ... Nada foi criado." Seguro, mas derruba a subida. Ver melhoria 2.
+- **Protocolos.** O exemplo consome os 4 primeiros números da sequência real (`TEB-2026-000001` a `000004`). O primeiro envio real vira `000005`. Ver melhoria 3.
+- **Docs.** README, `.env.example` e `docs/seguranca.md` batem com o código. Os CPFs do README são os do código. Sem senha no README.
+
+## Melhorias opcionais (não reprovam)
+
+1. Avisar na subida, em destaque, quando `TEB_SEMEAR_EXEMPLO=1` convive com `TEB_HTTPS=1`.
+2. Se o CPF do exemplo já tem conta real, avisar e seguir sem o exemplo em vez de derrubar a subida. Os CPFs são válidos por dígito e poderiam ser de uma pessoa real.
+3. Dar ao exemplo uma sequência de protocolo própria, para não consumir os números reais.
+4. Depois de apagar as variáveis, a organização do exemplo continua na lista pública de organizações e quem cria conta pode escolhê-la. Já está dito na doc. Um comando `remover-exemplo` ajudaria.
+5. Com o recurso do apelido ligado, texto com letra que não é o apelido (`root`) vai ao servidor e gera um 400 no console. Só ocorre com o recurso opt-in ligado. O servidor poderia responder 200 com `existe: false` ao texto desconhecido, mas isso muda o contrato de erro.
+6. O recurso do apelido é detectável por qualquer um em `/modo.json` (`loginUsuario: true`). É escolha de projeto. Vale citar em `docs/seguranca.md`.
+
+## Limpeza (rodada 2)
+
+- Scripts novos: `r4-pc-exemplo.mjs`, `r4-pc-exemplo2.mjs`, `r4-pc-exemplo3.mjs`, `r4-pc-exemplo4.mjs`. Capturas `telas-r4/pc-ex-*.png`. Ignorados pelo git.
+- Servidores de teste encerrados. Bancos em `tmp-r4/` (ignorado pelo git).
+- Sem commit nem push. Entrega intacta.
