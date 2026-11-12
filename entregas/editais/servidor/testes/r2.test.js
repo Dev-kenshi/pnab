@@ -237,3 +237,40 @@ test('R2 fora do ar: o usuário recebe 503 com mensagem clara, sem detalhes nem 
     await amb.fechar();
   }
 });
+
+test('falha 1: token de continuação repetido ou ausente para a listagem com erro, sem travar', async () => {
+  const base = r2Falso();
+  const r2Repetido = novoR2({ fetch: async (url, op) => {
+    const u = new URL(String(url));
+    if (u.searchParams.get('list-type') === '2') return new Response('<ListBucketResult><IsTruncated>true</IsTruncated><NextContinuationToken>mesmo</NextContinuationToken></ListBucketResult>', { status: 200 });
+    return base.fetch(url, op);
+  } });
+  await assert.rejects(r2Repetido.listarIds(), e => e.code === 'ARMAZEM_INDISPONIVEL' && /repetiu/.test(e.message));
+  const r2SemToken = novoR2({ fetch: async () => new Response('<ListBucketResult><IsTruncated>true</IsTruncated></ListBucketResult>', { status: 200 }) });
+  await assert.rejects(r2SemToken.listarIds(), e => e.code === 'ARMAZEM_INDISPONIVEL' && /sem token/.test(e.message));
+});
+
+test('falha 2: listagem dos anexos fora do ar não impede o backup do banco', async () => {
+  const r2 = novoR2({ fetch: async () => new Response('', { status: 500 }) });
+  const banco = await abrirBanco({ caminho: join(pasta, 'f2.sqlite') });
+  const nuvem = nuvemFalsa();
+  try {
+    const rel = await fazerBackup({ banco, anexos: r2, chave: randomBytes(32), destinos: destinosDoAmbiente({ ...CRED.b2, ...CRED.github }, { fetch: nuvem.fetch }), pastaTemp: join(pasta, 'tmp-f2') });
+    const b2 = rel.destinos.find(d => d.destino === 'Backblaze B2');
+    const gh = rel.destinos.find(d => d.destino === 'GitHub privado');
+    assert.equal(b2.banco, true, 'o banco foi enviado ao B2');
+    assert.equal(b2.ok, false);
+    assert.match(b2.erro, /não foi possível listar os anexos: R2 respondeu 500/);
+    assert.equal(gh.ok, true, 'o GitHub não guarda anexos e fica ok');
+    assert.ok([...nuvem.b2.keys()].some(k => k.startsWith('banco/')));
+  } finally {
+    await banco.fechar();
+  }
+});
+
+test('falha 3: corpo cortado no meio vira indisponibilidade (503), não anexo corrompido', async () => {
+  const cortado = () => new Response(new ReadableStream({ start(c) { c.enqueue(new Uint8Array([1, 2, 3])); c.error(new Error('conexão caiu')); } }), { status: 200 });
+  const r2 = novoR2({ fetch: async () => cortado() });
+  await assert.rejects(r2.ler('a'.repeat(32)), e => e.code === 'ARMAZEM_INDISPONIVEL' && !/segredo/.test(e.message));
+  await assert.rejects(r2.listarIds(), e => e.code === 'ARMAZEM_INDISPONIVEL');
+});
