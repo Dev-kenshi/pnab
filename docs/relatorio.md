@@ -1,85 +1,66 @@
-# Relatório da sessão na nuvem: 11/11/2026
+# Relatório consolidado do PNAB (Sistema Integrado TEB)
 
-Sistema Integrado TEB, para a Teste de Elenco Brasil Sistema Integrado.
+Para a Teste de Elenco Brasil Sistema Integrado.
 Emanuel Macêdo Luz, desenvolvedor do projeto.
+Atualizado em 12/11/2026. Junta o trabalho de todas as sessões e agentes. Valores de orçamento ficam fora deste repositório público.
 
-## Resumo
+## Situação em uma tabela
 
-| Etapa | Situação | Prova |
+| Parte | Situação | Prova |
 |---|---|---|
-| 1. F7 (teto absurdo dava HTTP 500) | Feita e na `main` | Testador: rodada 4 aprovada (`trabalho/editais/testes.md`) |
-| 2. Backups cifrados em 3 destinos | Feita e na `main` | Testador: reprovou na rodada 1, aprovou na rodada 3 (`trabalho/editais/testes-backup.md`) |
-| 3. Segurança: 100 validações e duplo teste | Feita e na `main` | Duplo teste: passada do construtor com 100 de 100 e mutação; passada do testador reprovou na rodada 1 e aprovou na rodada 2 (`trabalho/editais/testes-seguranca.md`) |
-| 4. Push na `main` a cada etapa aprovada | Feito | Merges `a2e1b85` (F7), `2b5b052` (backups e senha) e o merge da segurança |
-| 5. Este relatório | Feito | |
+| F7 (teto absurdo dava HTTP 500) | Feita e na `main` | Testador: rodada 4 aprovada (`trabalho/editais/testes.md`) |
+| Backups cifrados em 3 destinos | Feita e na `main` | Testador: reprovou na rodada 1, aprovou na rodada 3 (`testes-backup.md`) |
+| Segurança: 100 validações e duplo teste | Feita e na `main` | Passada do construtor com mutação; passada do testador reprovou na rodada 1 e aprovou na rodada 2 (`testes-seguranca.md`) |
+| Commits feitos no PC (README, Pages, trava, login admin, exemplo) | Revisados, corrigidos e na `main` | Testador: reprovou na rodada 1 (5 falhas), aprovou na rodada 2 (`testes-pc.md`) |
+| Anexos no Cloudflare R2 | Feito no ramo `construcao` | **Aguarda a revisão do testador** antes de ir para a `main` |
+| Replit | Importado em endereço de desenvolvimento, não publicado | Relato da sessão do PC: 234 de 234 testes no Node 24 |
 
-Números finais: 234 testes em `npm test`, todos passando, portão 3 aprovado, portão 4 aprovado (C1 a C12, 4 larguras).
+Números atuais no ramo `construcao`: **269 testes, todos passando**; portão 3 aprovado; portão 4 aprovado (4 larguras, critérios C1 a C12).
 
-## O que foi feito
+## Quem fez o quê
 
-### 1. F7: teto do edital
-- **Causa.** `erroTeto` em `js/regras.js` não tinha máximo. Um teto de 1e16 estourava o inteiro do SQLite e dava 500.
-- **Correção.** `TETO_MAXIMO` de R$ 10.000.000,00, igual ao máximo do item. A regra é a mesma no servidor e no modo demonstração. Depois, o teto passou a aceitar só número ou texto, então `[5]` também é recusado.
-- **Testes.** Novos testes nas regras, no servidor e na demonstração. Eles falham sem a correção.
-- **Testador, rodada 4.** Aprovada. Nenhum 500, e a mensagem aparece na tela em 1280 px e em 360 px.
+### Sessão na nuvem (esta)
+- **F7.** Teto do edital limitado a R$ 10.000.000,00 no servidor e na demonstração. Depois, só número ou texto.
+- **Backups.** Banco e anexos cifrados com AES-256-GCM para Google Drive, Backblaze B2 e GitHub privado (só o banco, semanal). Cópia lida numa transação e conferida antes de enviar, trava contra execuções juntas, restauração que nunca sobrescreve. Guia em `docs/backups.md`.
+- **Segurança.** 100 validações automatizadas ligadas ao Cybersecurity101 e ao NIST CSF 2.0. Política de senha do NIST SP 800-63B, scrypt mais forte, limites de tentativa, trava contra logins em paralelo, CSRF em camadas, e-mail sem token no log, adaptador Turso testado (com defeito real corrigido no ROLLBACK). Guia em `docs/seguranca.md`.
+- **Revisão dos commits do PC.** Cinco correções: tela de login só aceita usuário quando o recurso está ligado, rótulo certo, trava do backup solta em qualquer erro, apelido só na conta da plataforma, objeto no documento sem 500.
+- **Cloudflare R2.** Anexos no R2 pela API S3 com assinatura SigV4 sem pacotes, conferida com 4 exemplos oficiais da AWS. Mesma cifra do disco, escolha automática pelo ambiente, comando `migrar-anexos`, backup e restauração pelo armazém em uso, 503 claro com o R2 fora do ar e aviso no Replit com anexos em disco.
+- **Medição de capacidade.** Com SQLite local, 1 núcleo: 6 logins, 1.278 aberturas de painel e 729 rascunhos salvos por segundo. Na menor máquina do Replit (0,5 núcleo), estimativa de 1.000 a 2.000 pessoas navegando ao mesmo tempo. Com o Turso remoto a velocidade cai e precisa ser medida no Replit.
 
-### 2. Backups (`docs/backups.md`)
-- **O que vai.** O banco e os anexos, cifrados com AES-256-GCM e uma chave própria (`TEB_CHAVE_BACKUP`).
-- **Para onde vai.** Google Drive grátis (banco e anexos), Backblaze B2 (banco e anexos) e um GitHub privado (só o banco, uma vez por semana, por causa do histórico do Git).
-- **Anexos incrementais.** Cada anexo vai uma vez só, o que cabe nos 15 GB do Drive.
-- **Cópia confiável.** O banco é lido numa só transação e restaurado num banco temporário antes de enviar. Uma trava impede duas execuções juntas.
-- **Comandos.** `backup`, `restaurar <destino>` (nunca sobrescreve) e `criar-pasta-drive`. Credenciais só por variável de ambiente, listadas no `.env.example`.
-- **Testes.** 23, sem rede, com os três destinos simulados.
-- **Capacidade no plano grátis.** 10 GB de anexos no R2 dão cerca de 700 a 2.000 inscrições. Os 5 GB do Turso dão para centenas de milhares de inscrições, então o limite real são os anexos.
-- **Testador.** A rodada 1 reprovou com 6 falhas. A pior era um backup feito durante uma escrita, que não restaurava. A rodada 2 achou uma falha baixa. A rodada 3 aprovou.
+### Sessão "PNAB" no PC do usuário
+- README completo e `index.html` na raiz para o GitHub Pages (só modo demonstração).
+- Trava do backup ajustada para o Windows.
+- Login de teste opcional com apelido (`TEB_PLATAFORMA_LOGIN`), desligado por padrão.
+- Exemplo opcional no servidor real (`TEB_SEMEAR_EXEMPLO`), desligado por padrão e marcado como exemplo.
+- Replit importado da `main` (antes das últimas correções), com 234 de 234 testes no Node 24. Servidor no endereço de desenvolvimento, **não publicado**.
+- Criou no Replit um `iniciar-replit.sh` que gera a chave dos anexos num arquivo do servidor. **Recomendação: usar só a chave dos Secrets**, porque um arquivo pode sumir na publicação e deixar os anexos ilegíveis.
 
-### 3. Segurança (`docs/seguranca.md`)
-- **Manual.** Cybersecurity101 (danieldonda) e NIST CSF 2.0.
-- **100 validações.** Ficam em `servidor/testes/seguranca-catalogo.js`. Cada uma está ligada a uma seção do manual e a uma subcategoria do CSF.
-- **Duplo teste.**
-  - Passada 1, do construtor: 100 de 100, conferidas por mutação. Com quatro defesas desligadas, seis validações falharam como esperado.
-  - Passada 2, do testador, independente:
-    - Rodada 1 reprovou. A falha alta era que 120 logins em paralelo passavam do limite de 5 erros, e a senha certa entrava.
-    - As falhas médias eram o `X-Forwarded-For` forjável, a criação de conta sem limite, a dica de 8 caracteres nas telas e 6 validações fracas, pegas por 13 mutações dele.
-    - Tudo foi corrigido. A rodada 2 aprovou, com 16 de 16 mutações pegas e sem deadlock na trava nova.
-- **Melhorias.**
-  - Política de senha do NIST SP 800-63B, nas telas, no servidor e na demonstração.
-  - scrypt mais forte, refeito no login.
-  - Limites de tentativa no documento, no esqueci-senha e na senha atual.
-  - Link de redefinição fora do log, com adaptador Resend opcional.
-  - CSRF em camadas, conferindo `Origin` e `Sec-Fetch-Site`.
-  - Auditoria de acesso negado e de limites.
-  - HSTS com subdomínios.
-  - Tabela com mais de 200 linhas recusada com mensagem.
-- **Pendências conhecidas, todas fechadas:**
-  - limite de tentativas em `/api/acesso/documento` e no esqueci-senha;
-  - link de redefinição no log;
-  - adaptador Turso nunca testado. Ganhou 5 testes, que acharam um defeito real: o `ROLLBACK` usava o baton antigo depois de um erro. Corrigido.
+### Tarefa agendada "pnab-continuar-1101" (no PC)
+- Rodou às 16:40 de Brasília de 11/11, quando a nuvem estava parada. Atualizou o orçamento local e fez a importação no Replit descrita acima.
 
-## Como a equipe trabalhou
-- Quem construiu não aprovou o próprio trabalho. O agente testador revisou cada etapa, e cada reprovação voltou para correção com os passos para repetir.
-- Os portões foram rodados a cada etapa. O Chromium do Playwright 1.65 não pôde ser baixado, porque a rede da nuvem bloqueia `cdn.playwright.dev`. O portão 4 rodou com o Chromium que já vem na nuvem, ligado por `PLAYWRIGHT_BROWSERS_PATH`, sem mudar o portão.
-- O ambiente usou Node 22, que tem `node:sqlite`. O `package.json` pede Node 24 ou mais novo. Os testes passam nos dois, mas convém conferir no Node 24 da máquina local.
-- O contêiner reiniciou duas vezes durante a sessão. Nada se perdeu, porque cada etapa foi enviada ao GitHub assim que ficou pronta.
+### Agente testador (todas as rodadas)
+| Revisão | Rodadas | Veredito final |
+|---|---|---|
+| F7 | 4 | Aprovado |
+| Backups | 3 | Aprovado |
+| Segurança, segunda passada | 2 | Aprovado |
+| Commits do PC | 2 | Aprovado |
+| Cloudflare R2 | 0 | **Pendente** |
 
-## O que falta
-1. **Orçamento.** Fora do repositório público. É feito na máquina local.
-2. **Hospedagem no Replit.** Precisa do Chrome do usuário. Na hospedagem, configure:
-   - `TEB_HTTPS=1`, `TEB_CONFIAR_PROXY=1` e `TEB_URL_PUBLICA`;
-   - as duas chaves e os segredos dos destinos de backup;
-   - o agendamento diário de `node servidor/principal.js backup`.
-3. **Primeiro uso real dos serviços externos.** Google Drive, Backblaze B2, GitHub, Resend e Turso nunca foram chamados de verdade, porque aqui não há conta nem rede. Faça um backup, uma restauração de teste e um esqueci-senha de ponta a ponta antes de abrir para o público.
-4. **Adaptador R2 dos anexos.** Está previsto na spec, mas ainda não existe. Hoje os anexos ficam em disco. Quando ele existir, o backup vai precisar ler do R2.
-5. **Segurança, próximos passos.**
-   - Verificação em duas etapas (TOTP) para gestor e plataforma.
-   - Comando para trocar a chave dos anexos.
-   - Antivírus nos PDFs.
-   - Atrás de proxy, ligar `TEB_CONFIAR_PROXY=1`. Sem isso, todos os logins dividem um IP e entram em fila na trava.
-   - Tempo máximo de espera na trava de login.
-   - O limite de criação de conta hoje conta também as tentativas recusadas.
-   - `POST /api/acesso/sair` sem corpo dá 415. O front envia `{}`.
-6. **Melhorias opcionais registradas pelo testador.**
-   - Validar nota e parecer na tela antes de enviar.
-   - Renovar a trava em backup que passe de 6 horas.
-   - Repetir o envio ao B2 quando ele responder 5xx.
-   - Ver também os relatórios em `trabalho/editais/`.
+## O que falta (depende do usuário)
+
+1. **Revisão do R2 pelo testador** e merge na `main`.
+2. **Atualizar o Replit**, que está atrás da `main`: no Shell do Replit, rode `git pull`.
+3. **Chave dos anexos nos Secrets** (`TEB_CHAVE_ANEXOS`), com cópia no cofre de senhas. Não usar a chave gerada em arquivo pelo `iniciar-replit.sh`.
+4. **Criar o bucket R2** e o token, preencher as `TEB_R2_*` e rodar `node servidor/principal.js migrar-anexos` se já houver anexos no disco.
+5. **Banco no Turso**: criar o banco e preencher `TURSO_DATABASE_URL` e `TURSO_AUTH_TOKEN`. Depois, medir a velocidade no Replit.
+6. **Publicar** na Reserved VM e ligar o domínio próprio, com `TEB_HTTPS=1`, `TEB_CONFIAR_PROXY=1` e `TEB_URL_PUBLICA`.
+7. **Criar a conta da plataforma** com senha própria de 12 caracteres ou mais, por Secret.
+8. **Contas reais dos backups e do e-mail**: Google Drive, Backblaze B2, GitHub privado e Resend, com um backup, uma restauração e um esqueci-senha de ponta a ponta.
+9. **Confirmar o GitHub Pages.** No pedido original ele não devia ser ligado; o README já aponta para lá.
+10. **Melhorias opcionais registradas pelo testador**:
+    - exemplo no servidor real: aviso com HTTPS, seguir sem o exemplo se o CPF já existir, protocolo próprio e comando para removê-lo;
+    - login de teste: texto que não é o apelido ainda gera um 400 no console;
+    - trava de login sem tempo máximo de espera; limite de criação de conta conta também as recusadas;
+    - backup: renovar a trava acima de 6 horas e repetir o envio ao B2 quando ele responder 5xx;
+    - verificação em duas etapas, troca da chave dos anexos e antivírus nos PDFs.
