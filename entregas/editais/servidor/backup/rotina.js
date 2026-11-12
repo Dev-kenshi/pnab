@@ -74,13 +74,28 @@ export const nomeBanco = agora => `${PREFIXO_BANCO}${agora.toISOString().replace
 // O nome autenticado do conteúdo é o nome do objeto sem a extensão .teb.
 const conteudo = nome => nome.replace(/\.teb$/, '');
 
-async function idsDeAnexos(pasta) {
-  if (!pasta || !existsSync(pasta)) return [];
-  return (await readdir(pasta)).map(n => ANEXO_RE.exec(n)?.[1]).filter(Boolean).sort();
+// Fonte dos anexos: o armazém em uso (disco ou R2, com listarIds e lerBruto) ou, por compatibilidade, uma pasta.
+// Os bytes lidos já vêm cifrados com a chave dos anexos; o backup cifra de novo com a chave do backup.
+function fonteDeAnexos({ anexos, pastaAnexos }) {
+  if (anexos) return anexos;
+  return {
+    listarIds: async () => (pastaAnexos && existsSync(pastaAnexos) ? (await readdir(pastaAnexos)).map(n => ANEXO_RE.exec(n)?.[1]).filter(Boolean).sort() : []),
+    lerBruto: id => readFile(join(pastaAnexos, `${id}.bin`)),
+  };
+}
+
+// Destino da restauração dos anexos: o armazém (disco ou R2, com listarIds e gravarBruto) ou uma pasta.
+function alvoDeAnexos({ anexos, pastaAnexos }) {
+  if (anexos) return anexos;
+  if (!pastaAnexos) return null;
+  return {
+    listarIds: async () => (existsSync(pastaAnexos) ? (await readdir(pastaAnexos)).map(n => ANEXO_RE.exec(n)?.[1]).filter(Boolean) : []),
+    gravarBruto: async (id, bytes) => { await mkdir(pastaAnexos, { recursive: true }); await writeFile(join(pastaAnexos, `${id}.bin`), bytes, { flag: 'wx', mode: 0o600 }); },
+  };
 }
 
 // Faz o backup para todos os destinos. Um destino com erro não impede os outros.
-export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter = 14, pastaTemp, agora = new Date(), log = () => {} }) {
+export async function fazerBackup({ banco, anexos: armazem, pastaAnexos, chave, destinos, reter = 14, pastaTemp, agora = new Date(), log = () => {} }) {
   if (!destinos?.length) throw new Error('Nenhum destino de backup configurado. Veja docs/backups.md.');
   if (!Number.isInteger(reter) || reter < 1) throw new Error('A retenção precisa ser um número inteiro maior que zero.');
   const destravar = await travar(pastaTemp, agora);
@@ -95,7 +110,10 @@ export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter =
     await cifrarArquivo(plano, cifrado, { chave, nome: conteudo(relatorio.nomeBanco), gzip: true });
     await rm(plano);
     const bytesBanco = await readFile(cifrado);
-    const ids = await idsDeAnexos(pastaAnexos);
+    const fonte = fonteDeAnexos({ anexos: armazem, pastaAnexos });
+    // Falha ao listar os anexos não impede o backup do banco: cada destino com anexos registra o erro.
+    let ids = [], erroLista = null;
+    try { ids = await fonte.listarIds(); } catch (e) { erroLista = `não foi possível listar os anexos: ${String(e?.message || e)}`; }
 
     for (const d of destinos) {
       const r = { destino: d.nome, ok: false, banco: false, bancoPulado: false, anexosEnviados: 0, anexosJaExistiam: 0, apagados: 0, erro: null };
@@ -115,7 +133,10 @@ export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter =
             if (existentes.has(id)) { r.anexosJaExistiam++; continue; }
             const nome = `${PREFIXO_ANEXOS}${id}.bin.teb`;
             const saida = join(tmp, `${id}.teb`);
-            await cifrarArquivo(join(pastaAnexos, `${id}.bin`), saida, { chave, nome: conteudo(nome) });
+            const bruto = join(tmp, `${id}.bin`);
+            await writeFile(bruto, await fonte.lerBruto(id), { mode: 0o600 });
+            await cifrarArquivo(bruto, saida, { chave, nome: conteudo(nome) });
+            await rm(bruto);
             await d.enviar(nome, await readFile(saida));
             await rm(saida);
             r.anexosEnviados++;
@@ -124,6 +145,12 @@ export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter =
         // Nunca apaga o que acabou de enviar, mesmo com o relógio atrasado.
         const antigos = (await listarBackups(d)).filter(n => n !== relatorio.nomeBanco).slice(r.banco ? reter - 1 : reter);
         for (const nome of antigos) { await d.apagar(nome); r.apagados++; }
+        if (d.guardaAnexos && erroLista) {
+          // O banco foi; os anexos não. O destino fica com falha para o operador ver.
+          r.erro = erroLista;
+          log(`${d.nome}: banco ${r.bancoPulado ? 'pulado' : 'enviado'}, mas FALHOU nos anexos. ${erroLista}`);
+          continue;
+        }
         r.ok = true;
         log(`${d.nome}: ${r.bancoPulado ? `banco pulado (intervalo de ${d.intervaloDias} dias)` : 'banco enviado'}, ${r.anexosEnviados} anexos novos, ${r.anexosJaExistiam} já existiam, ${r.apagados} backups antigos apagados.`);
       } catch (e) {
@@ -145,7 +172,7 @@ export async function listarBackups(destino) {
 
 // Restaura de um destino para um banco NOVO e uma pasta de anexos. Nunca sobrescreve.
 // `abrirDestinoBanco` recebe nada e devolve o banco vazio já aberto (SQLite novo ou Turso vazio).
-export async function restaurar({ destino, chave, abrirDestinoBanco, pastaAnexos, nome, pastaTemp, log = () => {} }) {
+export async function restaurar({ destino, chave, abrirDestinoBanco, anexos: armazem, pastaAnexos, nome, pastaTemp, log = () => {} }) {
   const lista = await listarBackups(destino);
   const escolhido = nome || lista[0];
   if (!escolhido) throw new Error(`${destino.nome}: nenhum backup do banco encontrado.`);
@@ -167,17 +194,20 @@ export async function restaurar({ destino, chave, abrirDestinoBanco, pastaAnexos
     }
     log(`Banco restaurado de ${escolhido}.`);
     let anexos = 0, anexosPulados = 0;
-    if (destino.guardaAnexos && pastaAnexos) {
-      await mkdir(pastaAnexos, { recursive: true });
+    const alvo = alvoDeAnexos({ anexos: armazem, pastaAnexos });
+    if (destino.guardaAnexos && alvo) {
+      const existentes = new Set(await alvo.listarIds());
       for (const a of await destino.listar(PREFIXO_ANEXOS)) {
         const id = NOME_ANEXO_RE.exec(a.nome)?.[1];
         if (!id) continue;
-        const final = join(pastaAnexos, `${id}.bin`);
-        if (existsSync(final)) { anexosPulados++; continue; }
+        if (existentes.has(id)) { anexosPulados++; continue; }
         const baixado = join(tmp, `${id}.teb`);
+        const aberto = join(tmp, `${id}.bin`);
         try {
           await writeFile(baixado, await destino.baixar(a.nome), { mode: 0o600 });
-          await decifrarArquivo(baixado, final, { chave, nome: conteudo(a.nome) });
+          await decifrarArquivo(baixado, aberto, { chave, nome: conteudo(a.nome) });
+          await alvo.gravarBruto(id, await readFile(aberto));
+          await rm(aberto);
         } catch (e) {
           throw new Error(`Anexo ${id}: ${e.message} ${anexos} anexos já tinham sido restaurados.`);
         }

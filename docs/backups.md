@@ -113,6 +113,36 @@ node servidor/principal.js criar-pasta-drive
 
 Destino com todas as variáveis vazias fica desligado. Destino com variáveis pela metade é erro, para ninguém achar que tem backup sem ter.
 
+## Anexos no Cloudflare R2
+
+No Replit, o disco do servidor é refeito a cada publicação, e anexos guardados nele se perdem. Por isso, em produção, os anexos devem ficar no Cloudflare R2. O sistema fala com o R2 pela API compatível com S3, com assinatura AWS SigV4 feita sem pacotes externos.
+
+- **Mesma cifra.** Os anexos vão para o R2 cifrados com AES-256-GCM e a chave `TEB_CHAVE_ANEXOS`, no mesmo formato do disco. O R2 nunca vê o PDF em claro.
+- **Escolha automática.** Com as quatro variáveis `TEB_R2_*`, o servidor usa o R2. Sem nenhuma, usa a pasta `TEB_ANEXOS`. Variáveis pela metade impedem o servidor de subir. Ao subir, o servidor diz no log qual armazém está usando (`Anexos: r2` ou `Anexos: disco`).
+- **Aviso no Replit.** Se o servidor rodar no Replit com os anexos em disco, ele avisa no log.
+- **R2 fora do ar.** O envio e o download de anexos respondem 503 com uma mensagem clara. O resto do sistema continua funcionando.
+
+### Como configurar
+
+1. No painel da Cloudflare, em R2, crie um bucket **privado** (sem acesso público), por exemplo `teb-anexos`.
+2. Em "Manage R2 API Tokens", crie um token com permissão **Object Read & Write** só nesse bucket.
+3. Preencha nos Secrets:
+   - `TEB_R2_ACCOUNT_ID`: o ID da conta, com 32 caracteres, que aparece no painel do R2;
+   - `TEB_R2_ACCESS_KEY_ID` e `TEB_R2_SECRET_ACCESS_KEY`: os dados do token;
+   - `TEB_R2_BUCKET`: o nome do bucket.
+4. Se já existem anexos no disco, copie-os para o R2:
+
+```bash
+node servidor/principal.js migrar-anexos
+```
+
+   A cópia não decifra nada e pode rodar de novo: os anexos que já estão no R2 são pulados. Depois de conferir um download pelo sistema, os arquivos da pasta podem ser apagados.
+
+### Backup e restauração com o R2
+
+- O backup lê os anexos do armazém em uso, seja disco ou R2, e os envia cifrados de novo com a chave do backup.
+- O comando `restaurar` grava os anexos na pasta `TEB_RESTAURAR_ANEXOS`. Para levá-los ao R2, aponte `TEB_ANEXOS` para essa pasta e rode `migrar-anexos`.
+
 ## Quando rodar
 
 Uma vez por dia, de madrugada. Escolha uma das opções:
@@ -165,7 +195,7 @@ Para restaurar no Turso: restaure primeiro no SQLite local, como acima. Depois i
 
 ## Testes
 
-`servidor/testes/backup.test.js` tem 23 testes, todos sem rede. Os três destinos são simulados por `servidor/testes/nuvem-falsa.js`. Os testes cobrem:
+`servidor/testes/backup.test.js` tem 23 testes, e `servidor/testes/r2.test.js` tem 9, todos sem rede. Os três destinos são simulados por `servidor/testes/nuvem-falsa.js`. Os testes cobrem:
 - cifra, adulteração, chave errada e nome trocado;
 - sessões e tokens fora do backup;
 - envio aos 3 destinos, com o GitHub sem anexos;
@@ -181,7 +211,7 @@ Para restaurar no Turso: restaure primeiro no SQLite local, como acima. Depois i
 
 ## Limites conhecidos
 
-- Os anexos são lidos da pasta local (`TEB_ANEXOS`). O adaptador R2 dos anexos está previsto, mas ainda não existe. Quando existir, o backup vai precisar ler do R2.
+- O adaptador do Cloudflare R2 foi testado com um bucket simulado e com os exemplos oficiais de assinatura da AWS, mas nunca contra o R2 de verdade. No primeiro uso, envie e baixe um anexo de teste.
 - Os destinos reais nunca foram chamados nesta sessão, porque não há conta nem rede. O formato das chamadas segue a documentação pública do Google Drive v3, do B2 v3 e da API de conteúdo do GitHub. No primeiro uso, rode um backup e uma restauração de teste.
 - Enquanto o banco é exportado, os outros pedidos ao servidor esperam, porque a leitura é numa só transação. Com o banco pequeno, isso dura frações de segundo. Rode o backup de madrugada.
 - O banco é exportado e cada arquivo é enviado inteiro, sem divisão em partes. Isso vale até algumas centenas de MB por backup. Acima disso, vai ser preciso dividir o envio em partes.

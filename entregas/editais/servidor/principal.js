@@ -7,6 +7,7 @@
 //   node servidor/principal.js garantir-plataforma  o mesmo, para rodar a cada subida (Replit)
 //   node servidor/principal.js semear-exemplo     cria o exemplo de teste (TEB_EXEMPLO_SENHA), idempotente
 //   node servidor/principal.js backup             faz o backup cifrado nos destinos configurados
+//   node servidor/principal.js migrar-anexos      copia os anexos do disco para o Cloudflare R2
 //   node servidor/principal.js criar-pasta-drive  cria a pasta do backup no Google Drive e mostra o ID
 //   node servidor/principal.js restaurar <destino> [nome-do-backup]
 //                                                 restaura num banco e numa pasta NOVOS (veja docs/backups.md)
@@ -20,7 +21,8 @@ import { criarApp } from './app.js';
 import { emailDoAmbiente } from './email.js';
 import { registrar } from './auditoria.js';
 import { abrirBanco } from './banco.js';
-import { criarArmazemDisco, lerChave } from './anexos.js';
+import { randomBytes } from 'node:crypto';
+import { armazemDoAmbiente, criarArmazemDisco, lerChave, migrarAnexos } from './anexos.js';
 import { lerChaveBackup } from './backup/cifra.js';
 import { destinosDoAmbiente, googleDrive } from './backup/destinos.js';
 import { fazerBackup, listarBackups, restaurar } from './backup/rotina.js';
@@ -85,7 +87,9 @@ function configBackup() {
     chave,
     reter,
     destinos: destinosDoAmbiente(env),
-    pastaAnexos: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'),
+    // Os anexos vêm do armazém em uso (disco ou R2). O backup não decifra anexos: sem a chave dos anexos,
+    // uma chave qualquer só satisfaz o construtor, porque o backup lê os bytes já cifrados.
+    anexos: armazemDoAmbiente(env, { chave: chaveAnexos ?? randomBytes(32), pastaPadrao: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos') }),
     pastaTemp: caminho(env.TEB_BACKUP_TEMP || 'servidor/dados/tmp-backup'),
   };
 }
@@ -164,7 +168,8 @@ async function servir() {
     try { logExemplo(await semearExemplo(banco, { senha: env.TEB_EXEMPLO_SENHA, agora: new Date(), ip: 'subida' }), '[exemplo] '); } catch (e) { await banco.fechar(); sair(`[exemplo] ${e.message}`); }
   }
   if (loginPlataforma) console.log(`[plataforma] Login de teste ligado: usuário "${loginPlataforma.usuario}". Desligue apagando TEB_PLATAFORMA_LOGIN.`);
-  const anexos = criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave });
+  let anexos;
+  try { anexos = armazemDoAmbiente(env, { chave, pastaPadrao: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos') }); } catch (e) { sair(e.message); }
   const porta = Number(env.PORTA || 3000);
   let enviarEmail;
   try { enviarEmail = emailDoAmbiente(env); } catch (e) { sair(e.message); }
@@ -178,7 +183,17 @@ async function servir() {
     urlPublica: String(env.TEB_URL_PUBLICA || `http://localhost:${porta}`).replace(/\/+$/, ''),
   });
   const servidor = createServer({ requestTimeout: 60000, headersTimeout: 20000 }, app);
-  servidor.listen(porta, () => console.log(`Sistema Integrado TEB no ar na porta ${porta}. Banco: ${banco.tipo}.`));
+  servidor.listen(porta, () => console.log(`Sistema Integrado TEB no ar na porta ${porta}. Banco: ${banco.tipo}. Anexos: ${anexos.tipo}.`));
+  // No Replit publicado, o disco é refeito a cada publicação: anexos em disco se perdem.
+  // Com o R2 ligado, anexos que ficaram no disco não abrem mais: avisa para migrar.
+  if (anexos.tipo === 'r2') {
+    criarArmazemDisco({ pasta: caminho(env.TEB_ANEXOS || 'servidor/dados/anexos'), chave }).listarIds()
+      .then(ids => { if (ids.length) console.warn(`[aviso] ${ids.length} anexos ainda estão no disco. Rode: node servidor/principal.js migrar-anexos`); })
+      .catch(() => {});
+  }
+  if (env.REPL_ID && anexos.tipo === 'disco') {
+    console.warn('[aviso] Replit com anexos em disco: eles somem a cada publicação. Configure TEB_R2_* (docs/backups.md) e rode migrar-anexos.');
+  }
   // Backup automático opcional dentro do servidor. Em produção prefira um agendador externo.
   const horas = Number(env.TEB_BACKUP_INTERVALO_HORAS || 0);
   let relogioBackup = null;
@@ -193,10 +208,24 @@ async function servir() {
   process.on('SIGTERM', parar);
 }
 
+// Copia os anexos do disco (TEB_ANEXOS) para o Cloudflare R2, sem decifrar. Pode rodar de novo: pula os que já foram.
+async function migrarAnexosComando() {
+  let chave;
+  try { chave = lerChave(env.TEB_CHAVE_ANEXOS); } catch (e) { sair(e.message); }
+  const pasta = caminho(env.TEB_ANEXOS || 'servidor/dados/anexos');
+  const destino = armazemDoAmbiente(env, { chave, pastaPadrao: pasta });
+  if (destino.tipo !== 'r2') sair('Preencha as variáveis TEB_R2_* antes de migrar. Veja docs/backups.md.');
+  const origem = criarArmazemDisco({ pasta, chave });
+  const r = await migrarAnexos(origem, destino, { log: m => console.log(`[migrar] ${m}`) });
+  console.log(`Migração concluída: ${r.copiados} anexos copiados para o R2, ${r.pulados} já estavam lá.`);
+  console.log(`Confira um download pelo sistema. Os arquivos em ${pasta} podem ser apagados depois.`);
+}
+
 const comando = process.argv[2];
 if (comando === 'criar-plataforma' || comando === 'garantir-plataforma') await criarPlataforma().catch(e => sair(e.message));
 else if (comando === 'semear-exemplo') await semearExemploComando().catch(e => sair(e.message));
 else if (comando === 'backup') await backup().catch(e => sair(e.message));
+else if (comando === 'migrar-anexos') await migrarAnexosComando().catch(e => sair(e.message));
 else if (comando === 'criar-pasta-drive') await criarPastaDrive().catch(e => sair(e.message));
 else if (comando === 'restaurar') await restaurarComando(process.argv[3], process.argv[4]).catch(e => sair(e.message));
 else if (!comando) await servir();
