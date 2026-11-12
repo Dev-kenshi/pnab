@@ -28,10 +28,11 @@ function contasDemo() {
 
 export async function renderLogin(ctx) {
   const { raiz, api, params, navegar } = ctx;
-  // No modo servidor o campo também aceita um usuário de teste (TEB_PLATAFORMA_LOGIN), conferido só no servidor.
-  const servidor = api.modo === 'servidor';
+  // O campo só aceita o usuário de teste (TEB_PLATAFORMA_LOGIN) quando o servidor diz que ele está ligado.
+  // Desligado (o padrão), texto com letra é recusado aqui mesmo, sem ir ao servidor.
+  const aceitaUsuario = api.modo === 'servidor' && api.loginUsuario === true;
   const doc = campo({
-    rotulo: servidor ? 'CPF, CNPJ ou usuário' : 'CPF ou CNPJ', nome: 'documento', inputmode: servidor ? undefined : 'numeric',
+    rotulo: aceitaUsuario ? 'CPF, CNPJ ou usuário' : 'CPF ou CNPJ', nome: 'documento', inputmode: aceitaUsuario ? undefined : 'numeric',
     autocomplete: 'username', dica: 'Pode digitar com ou sem pontos e traços.',
   });
   const senha = campo({ rotulo: 'Senha', nome: 'senha', tipo: 'password', autocomplete: 'current-password' });
@@ -58,7 +59,7 @@ export async function renderLogin(ctx) {
     if (!texto) { mostrarErro(doc.erro, 'Documento obrigatório.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
     const v = validarDocumento(texto);
     // Texto com letra no modo servidor vai como usuário, sem conferir dígito. A demonstração segue só com documento.
-    const usuario = servidor && !v.valido && /\p{L}/u.test(texto);
+    const usuario = aceitaUsuario && !v.valido && /\p{L}/u.test(texto);
     if (!v.valido && !usuario) { mostrarErro(doc.erro, 'Documento inválido. Confira os números.'); doc.input.setAttribute('aria-invalid', 'true'); return; }
     identificador = usuario ? texto : v.digitos;
     avancar.disabled = true;

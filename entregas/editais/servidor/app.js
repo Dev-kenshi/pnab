@@ -133,7 +133,8 @@ export function criarApp({
 
     try {
       if (caminho === '/modo.json' && (req.method === 'GET' || req.method === 'HEAD')) {
-        enviarJson(res, 200, { modo: 'servidor' });
+        // loginUsuario diz à tela se aceita o usuário de teste. Só um sim ou não, nunca o usuário em si.
+        enviarJson(res, 200, { modo: 'servidor', loginUsuario: Boolean(loginPlataforma) });
         return;
       }
 

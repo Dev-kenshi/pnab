@@ -139,6 +139,8 @@ Recurso só para teste. Sem a variável `TEB_PLATAFORMA_LOGIN`, nada muda.
 - **O que continua igual.** Limite de tentativas, trava por documento e por IP, tempo constante e auditoria. Na auditoria, a entrada pelo usuário fica marcada com `via: apelido`.
 - **Conta criada sozinha.** Com `TEB_PLATAFORMA_SENHA` no ambiente, a subida cria a conta da plataforma se faltar. Se já existe, só avisa. O comando `node servidor/principal.js garantir-plataforma` faz o mesmo.
 - **Atenção.** Trocar a senha nos Secrets não troca a senha de uma conta que já existe. Use "Esqueci minha senha" ou "Minha conta".
+- **Só para a conta da plataforma.** Se `TEB_PLATAFORMA_DOCUMENTO` apontar para uma conta de outro papel, o usuário de teste é recusado como conta inexistente.
+- **O recurso fica visível.** O `modo.json` informa se ele está ligado (`loginUsuario: true`), para a tela mostrar "CPF, CNPJ ou usuário". Ele nunca informa qual é o usuário. Com o recurso desligado, a tela recusa texto com letras sem consultar o servidor.
 - **Antes de usar de verdade.** Apague `TEB_PLATAFORMA_LOGIN`. Um nome previsível como `admin` facilita a vida de quem tenta adivinhar senhas.
 - **Modo demonstração.** Não aceita usuário. Só CPF ou CNPJ válido.
 
