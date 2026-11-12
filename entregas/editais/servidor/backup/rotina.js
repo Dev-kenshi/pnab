@@ -43,10 +43,17 @@ async function travar(pastaTemp, agora) {
     }
     await writeFile(trava, String(agora.toISOString()), { mode: 0o600 });
   }
-  for (const n of await readdir(pastaTemp)) {
-    if (/^(bkp|rest)-/.test(n)) await rm(join(pastaTemp, n), { recursive: true, force: true });
+  const destravar = () => rm(trava, { force: true });
+  try {
+    for (const n of await readdir(pastaTemp)) {
+      if (/^(bkp|rest)-/.test(n)) await rm(join(pastaTemp, n), { recursive: true, force: true });
+    }
+  } catch (e) {
+    // Limpeza falhou (ex.: antivírus segurando o arquivo): solta a trava antes de desistir.
+    await destravar();
+    throw e;
   }
-  return () => rm(trava, { force: true });
+  return destravar;
 }
 
 // Confere que o arquivo exportado restaura de verdade, num SQLite temporário, antes de enviar.
@@ -77,7 +84,8 @@ export async function fazerBackup({ banco, pastaAnexos, chave, destinos, reter =
   if (!destinos?.length) throw new Error('Nenhum destino de backup configurado. Veja docs/backups.md.');
   if (!Number.isInteger(reter) || reter < 1) throw new Error('A retenção precisa ser um número inteiro maior que zero.');
   const destravar = await travar(pastaTemp, agora);
-  const tmp = await mkdtemp(join(pastaTemp, 'bkp-'));
+  let tmp;
+  try { tmp = await mkdtemp(join(pastaTemp, 'bkp-')); } catch (e) { await destravar(); throw e; }
   const relatorio = { nomeBanco: nomeBanco(agora), contagem: null, destinos: [] };
   try {
     const plano = join(tmp, 'banco.ndjson');
@@ -143,7 +151,8 @@ export async function restaurar({ destino, chave, abrirDestinoBanco, pastaAnexos
   if (!escolhido) throw new Error(`${destino.nome}: nenhum backup do banco encontrado.`);
   if (!NOME_BANCO_RE.test(escolhido) || (nome && !lista.includes(nome))) throw new Error(`${destino.nome}: backup ${escolhido} não encontrado.`);
   const destravar = await travar(pastaTemp, new Date());
-  const tmp = await mkdtemp(join(pastaTemp, 'rest-'));
+  let tmp;
+  try { tmp = await mkdtemp(join(pastaTemp, 'rest-')); } catch (e) { await destravar(); throw e; }
   try {
     const cifrado = join(tmp, 'banco.teb');
     await writeFile(cifrado, await destino.baixar(escolhido), { mode: 0o600 });

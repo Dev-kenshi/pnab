@@ -141,7 +141,9 @@ export default [
         throw falha(429, 'bloqueado', 'Muitas tentativas. Tente de novo em 15 minutos.');
       }
       const { linhas } = await banco.executar(`${SQL_USUARIO} WHERE u.documento = ?`, [digitos]);
-      const usuario = linhas[0];
+      // O apelido de teste só vale para a conta da plataforma. Se o documento configurado for de outro papel,
+      // a entrada pelo apelido é tratada como conta inexistente (mesma resposta e mesmo tempo).
+      const usuario = via.detalhe && linhas[0]?.papel !== 'plataforma' ? undefined : linhas[0];
       const certa = usuario ? await verificarSenha(senha, usuario.senha_hash) : await verificarSenhaFicticia(senha);
       if (!certa) {
         await banco.transacao(tx => registrarErroLogin(tx, { documento: digitos, ip, agora }));

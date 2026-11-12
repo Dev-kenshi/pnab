@@ -10,8 +10,10 @@ export const DIAS_RECURSO = 15;
 
 const DIA_MS = 24 * 60 * 60 * 1000;
 
+// Só texto ou número viram dígitos. Objeto, lista ou booleano dão vazio (antes, {"toString":"x"} dava erro 500).
 export function somenteDigitos(texto) {
-  return String(texto ?? '').replace(/\D/g, '');
+  if (typeof texto !== 'string' && typeof texto !== 'number') return '';
+  return String(texto).replace(/\D/g, '');
 }
 
 function repetido(d) {
