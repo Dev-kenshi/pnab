@@ -115,7 +115,7 @@ test('cabeçalhos de segurança em toda resposta', async () => {
   assert.equal(r.cabecalhos.get('x-content-type-options'), 'nosniff');
   assert.equal(r.cabecalhos.get('referrer-policy'), 'same-origin');
   const modo = await amb.cliente().pedir('GET', '/modo.json');
-  assert.deepEqual(modo.corpo, { modo: 'servidor' });
+  assert.deepEqual(modo.corpo, { modo: 'servidor', loginUsuario: false });
   assert.equal(modo.cabecalhos.get('cache-control'), 'no-store');
   const texto = await amb.cliente().pedir('POST', '/api/acesso/documento', undefined, { bruto: 'documento=1', cabecalhos: { 'content-type': 'text/plain' } });
   assert.equal(texto.status, 415);

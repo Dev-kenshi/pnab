@@ -76,7 +76,7 @@ function transporteServidor(fetchFn) {
   };
 }
 
-export function criarApi({ modo = 'demonstracao', fetch: fetchFn = globalThis.fetch?.bind(globalThis), armazenamento = globalThis.localStorage, agora = () => new Date() } = {}) {
+export function criarApi({ modo = 'demonstracao', loginUsuario = false, fetch: fetchFn = globalThis.fetch?.bind(globalThis), armazenamento = globalThis.localStorage, agora = () => new Date() } = {}) {
   let transporte;
   if (modo === 'servidor') {
     transporte = transporteServidor(fetchFn);
@@ -104,6 +104,8 @@ export function criarApi({ modo = 'demonstracao', fetch: fetchFn = globalThis.fe
 
   return {
     modo,
+    // Login por usuário de teste (TEB_PLATAFORMA_LOGIN) ligado no servidor. Na demonstração é sempre falso.
+    loginUsuario: modo === 'servidor' && loginUsuario === true,
     // Sem sessão devolve { usuario: null } com status 200.
     sessao: async () => ({ usuario: (await pedir('GET', '/api/sessao'))?.usuario ?? null }),
     listarOrganizacoes: () => pedir('GET', '/api/organizacoes'),
@@ -159,14 +161,15 @@ let apiPronta = null;
 export function obterApi() {
   apiPronta ??= (async () => {
     let modo = 'demonstracao';
+    let loginUsuario = false;
     try {
       const r = await fetch(new URL('../modo.json', import.meta.url), { cache: 'no-store' });
       if (r.ok) {
         const j = await r.json();
-        if (j && j.modo === 'servidor') modo = 'servidor';
+        if (j && j.modo === 'servidor') { modo = 'servidor'; loginUsuario = j.loginUsuario === true; }
       }
     } catch { /* sem modo.json legível: demonstração */ }
-    return criarApi({ modo });
+    return criarApi({ modo, loginUsuario });
   })();
   return apiPronta;
 }
